@@ -8,7 +8,6 @@
 /webapps
 /push-server/build
 /service-push/build
-/push-server/publish
 /push-server/logs
 /apns-pusher/build
 /service-push/tools/lib
