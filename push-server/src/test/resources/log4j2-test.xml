@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="180">
+    <Appenders>
+        <Console name="console" target="SYSTEM_OUT">
+            <PatternLayout>
+                <Pattern>%d{HH:mm:ss.SSS} | %-5level | %msg | %c{1}.%M(%L) | %t | %X{akkaSource}%n</Pattern>
+            </PatternLayout>
+        </Console>
+    </Appenders>
+    <Loggers>
+        <Logger name="net.arksea.pusher" level="debug"/>
+        <Logger name="net.arksea.pusher.baidu" level="trace"/>
+        <Logger name="net.arksea.pusher.server.cast.UserDailyTimerTargetSource" level="debug"/>
+        <Logger name="net.arksea.pusher.server.service.UserDailyTimerService" level="debug"/>
+
+        <Logger name="net.arksea.pusher.server.cast.DailyCastTargetSource" level="debug"/>
+        <Logger name="net.arksea.pusher.server.service.DailyCastService" level="debug"/>
+        <!--<Logger name="net.arksea.apns.pusher.ApnsHttp2Client" level="trace"/>-->
+        <Root level="info">
+            <AppenderRef ref="console"/>
+        </Root>
+    </Loggers>
+</Configuration>

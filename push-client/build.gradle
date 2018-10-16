@@ -1,0 +1,48 @@
+apply plugin: 'base'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+description = """推送服务定义模块"""
+
+dependencies {
+    compile ("net.arksea:aregister-client:0.4-SNAPSHOT")
+    compile  'org.hibernate:hibernate-entitymanager:4.3.5.Final'
+    compile  'org.hibernate:hibernate-validator:5.0.3.Final'
+}
+
+String mavenVersion = version
+String mavenArtifactId = name
+
+configure(install.repositories.mavenInstaller) {
+    pom.project {
+        groupId = group
+        artifactId = mavenArtifactId
+        version = mavenVersion
+    }
+}
+
+uploadArchives {
+    repositories.mavenDeployer {
+        repository(url: "http://nexus.arksea.net:8081/nexus/content/repositories/releases") {
+            authentication(userName: "admin", password: "admin123")
+        }
+        snapshotRepository(url: "http://nexus.arksea.net:8081/nexus/content/repositories/snapshots") {
+            authentication(userName: "admin", password: "admin123")
+        }
+    }
+}.dependsOn(assemble)
+
+task publishDev <<{
+    //拷贝前先删除部署目录
+    delete('tools/lib')
+    copy{ //拷贝依赖库
+        from configurations.runtime
+        into 'tools/lib'
+    }
+    delete('tools/lib/xml-apis-1.0.b2.jar')
+    copy{ //拷贝类
+        from 'build/libs/'
+        into 'tools/lib'
+    }
+}
+publishDev.dependsOn(build)

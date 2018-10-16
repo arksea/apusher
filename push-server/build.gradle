@@ -1,0 +1,89 @@
+apply plugin: 'base'
+apply plugin: 'java'
+
+description = """推送服务"""
+
+dependencies {
+    compile project (':pusher-apns')
+    compile project (':pusher-baidu')
+    compile project (':push-client')
+    compile 'net.arksea:acache:0.8.0-SNAPSHOT'
+    compile ("net.arksea:aregister-client:0.4-SNAPSHOT")
+    compile 'net.arksea:httpclient-asker:1.0.3-SNAPSHOT'
+    compile 'redis.clients:jedis:2.8.1'
+    compile 'org.codehaus.groovy:groovy-all:2.4.4'
+
+    compile 'org.springframework:spring-core:4.3.9.RELEASE'
+    compile 'org.springframework:spring-context:4.3.9.RELEASE'
+    compile 'org.springframework:spring-context-support:4.3.9.RELEASE'
+    compile 'org.springframework:spring-webmvc:4.3.9.RELEASE'
+    compile 'org.springframework.data:spring-data-jpa:1.11.4.RELEASE'
+
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.4.0'
+    compile 'com.fasterxml.jackson.module:jackson-module-jaxb-annotations:2.4.0'
+
+    testCompile 'org.springframework:spring-test:4.2.2.RELEASE'
+
+    runtime 'mysql:mysql-connector-java:5.1.22'
+    runtime 'org.apache.tomcat:tomcat-dbcp:8.0.30'
+    runtime 'commons-dbcp:commons-dbcp:1.4'
+    runtime 'org.apache.commons:commons-pool2:2.2'
+}
+
+//IDE中运行与调试的配置
+def runMainClass = 'net.arksea.pusher.ServerMain'
+def runJvmArgs = ['-Dspring.profiles.active="development"','-Xbootclasspath/p:/alpn-boot-8.1.11.v20170118.jar']
+
+//配置在IDE中运行及调试时的参数
+task run(type: JavaExec, dependsOn: 'classes') {
+    classpath = sourceSets.test.runtimeClasspath + sourceSets.main.runtimeClasspath
+    main = runMainClass
+    standardInput = System.in
+    jvmArgs = runJvmArgs
+}
+
+task debug(type: JavaExec, dependsOn: 'classes') {
+    classpath = sourceSets.test.runtimeClasspath + sourceSets.main.runtimeClasspath
+    main = runMainClass
+    standardInput = System.in
+    jvmArgs = runJvmArgs
+    debug = true
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': runMainClass
+        attributes "Class-Path": configurations.runtime.collect { 'lib/'+it.getName() }.join(' ')+" config/"
+    }
+}
+
+//拷贝部署文件到指定目录
+task publish <<{
+    //拷贝前先删除部署目录
+    delete('publish/release')
+    copy{ //拷贝本项目打包的jar文件
+        from 'build/libs/'
+        into 'publish/release'
+    }
+    copy{ //拷贝依赖库
+        from configurations.runtime
+        into 'publish/release/lib'
+    }
+    copy{ //拷贝配置文件
+        from 'config/'
+        into 'publish/release/config'
+    }
+    copy{
+        from 'lib/alpn-boot-8.1.6.v20151105.jar'
+        into 'publish/release/lib'
+    }
+
+    delete('publish/release/lib/akka-actor_2.11-2.4.8.jar')
+    delete('publish/release/lib/akka-cluster_2.11-2.4.8.jar')
+    delete('publish/release/lib/akka-protobuf_2.11-2.4.8.jar')
+    delete('publish/release/lib/akka-remote_2.11-2.4.8.jar')
+    delete('publish/release/lib/akka-slf4j_2.11-2.4.8.jar')
+    delete('publish/release/lib/scala-java8-compat_2.11-0.7.0.jar')
+}
+publish.dependsOn(build)
+

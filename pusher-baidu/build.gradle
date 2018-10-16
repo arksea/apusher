@@ -1,0 +1,10 @@
+apply plugin: 'base'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+description = """Baidu Pusher"""
+
+dependencies {
+    compile project (':pusher-common')
+    compile fileTree(dir: 'libs', include:['*.jar'])
+}

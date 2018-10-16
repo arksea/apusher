@@ -1,0 +1,5 @@
+apply plugin: 'base'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+description = """Pusher Common"""
