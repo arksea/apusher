@@ -38,7 +38,6 @@ public class ApnsPushActor extends AbstractActor {
     private Session session;
     private Cancellable pingTimer;
     private LifeCycle.Listener clientLifeCycleListener;
-
     public ApnsPushActor(State state) {
         this.state = state;
          clientLifeCycleListener = new ClientLifeCycleListener(state.pushActorName);
@@ -60,20 +59,22 @@ public class ApnsPushActor extends AbstractActor {
     static class State {
         int connectDelay = BACKOFF_MIN;
         final String pushActorName;
+        final String apnsServerIP;
         final String apnsTopic;
         final KeyManagerFactory keyManagerFactory;
         final IPushStatusListener pushStatusListener;
 
-        public State(String pushActorName, String apnsTopic, KeyManagerFactory keyManagerFactory, IPushStatusListener pushStatusListener) {
+        public State(String pushActorName, String apnsServerIP, String apnsTopic, KeyManagerFactory keyManagerFactory, IPushStatusListener pushStatusListener) {
             this.pushActorName = pushActorName;
+            this.apnsServerIP = apnsServerIP;
             this.apnsTopic = apnsTopic;
             this.keyManagerFactory = keyManagerFactory;
             this.pushStatusListener = pushStatusListener;
         }
     }
 
-    public static Props props(String pusherName, String apnsTopic, KeyManagerFactory keyManagerFactory, IPushStatusListener pushStatusListener) throws Exception {
-        State state = new State(pusherName, apnsTopic, keyManagerFactory, pushStatusListener);
+    public static Props props(String pusherName, String apnsServerIP, String apnsTopic, KeyManagerFactory keyManagerFactory, IPushStatusListener pushStatusListener) throws Exception {
+        State state = new State(pusherName, apnsServerIP, apnsTopic, keyManagerFactory, pushStatusListener);
         return Props.create(ApnsPushActor.class, new Creator<ApnsPushActor>() {
             @Override
             public ApnsPushActor create() throws Exception {
@@ -183,7 +184,7 @@ public class ApnsPushActor extends AbstractActor {
     }
 
     private void connect() {
-        ApnsClientUtils.connect(apnsClient, state.keyManagerFactory,
+        ApnsClientUtils.connect(state.apnsServerIP, apnsClient, state.keyManagerFactory,
                 new Session.Listener.Adapter() {
                     @Override
                     public void onReset(Session session, ResetFrame frame) {

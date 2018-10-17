@@ -9,10 +9,13 @@ import akka.routing.ScatterGatherFirstCompletedGroup;
 import net.arksea.pusher.IPushStatusListener;
 import net.arksea.pusher.IPusher;
 import net.arksea.pusher.PushEvent;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
 import javax.net.ssl.KeyManagerFactory;
+import java.net.InetAddress;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
@@ -25,20 +28,26 @@ import static akka.japi.Util.classTag;
  * Created by xiaohaixing on 2017/12/11.
  */
 public class ApnsPusher implements IPusher {
-    private List<ActorRef> pusherList;
-    private List<ActorRef> pusherPoolList;
+    private static final Logger logger = LogManager.getLogger(ApnsPusher.class);
+    private final List<ActorRef> pusherList;
+    private final List<ActorRef> pusherPoolList;
     private final int timeout = 100;
     private final int askAvailableTimeout = 100;
-    private ActorRefFactory actorRefFactory;
-    private Random random = new Random(System.currentTimeMillis());
+    private final ActorRefFactory actorRefFactory;
+    private final Random random = new Random(System.currentTimeMillis());
+    private final InetAddress[] apnsServerAddrArray;
+
     public ApnsPusher(String pusherName, int clientCount, String apnsTopic, ActorRefFactory actorRefFactory,
                       KeyManagerFactory keyManagerFactory, IPushStatusListener pushStatusListener) throws Exception {
+        apnsServerAddrArray = InetAddress.getAllByName(ApnsClientUtils.APNS_HOST);
+        logger.debug("APNS Server address count = " + apnsServerAddrArray.length);
         this.actorRefFactory = actorRefFactory;
         pusherList = new ArrayList<>(clientCount);
         pusherPoolList = new ArrayList<>(clientCount);
         for (int i=0;i<clientCount;++i) {
             String pushActorName = pusherName+"-"+i;
-            Props props = ApnsPushActor.props(pushActorName,apnsTopic, keyManagerFactory,pushStatusListener);
+            String apnsAddr = getApnsAddress();
+            Props props = ApnsPushActor.props(pushActorName, apnsAddr, apnsTopic, keyManagerFactory,pushStatusListener);
             ActorRef ref = actorRefFactory.actorOf(props);
             pusherList.add(ref);
         }
@@ -63,6 +72,9 @@ public class ApnsPusher implements IPusher {
         }
     }
 
+    private String getApnsAddress() {
+        return apnsServerAddrArray[(random.nextInt(apnsServerAddrArray.length - 1))].getHostAddress();
+    }
     /**
      * @param event
      * @return 返回true表示推送提交成功，超时异常表示没有可用client，false表示推送失败

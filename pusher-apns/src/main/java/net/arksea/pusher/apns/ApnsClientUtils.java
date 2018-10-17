@@ -24,11 +24,13 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.security.KeyStore;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
@@ -40,7 +42,7 @@ public class ApnsClientUtils {
     private static final Logger log = LogManager.getLogger(ApnsClientUtils.class);
     private static ObjectMapper objectMapper = new ObjectMapper();
     private static final int MAX_STREAM_SIZE = 495;
-    private static final String APNS_HOST = "api.push.apple.com";
+    public static final String APNS_HOST = "api.push.apple.com";
     private static final int APNS_PORT = 443;
     //private static final int APNS_PORT = 2197;
     private static final String URI_BASE = "https://" + APNS_HOST + ":" + APNS_PORT + "/3/device/";
@@ -57,7 +59,7 @@ public class ApnsClientUtils {
         return http2Client;
     }
 
-    public static void connect(HTTP2Client client, final KeyManagerFactory keyManagerFactory, Session.Listener sessionListener, Promise<Session> promise)  {
+    public static void connect(String apnsServerIP, HTTP2Client client, final KeyManagerFactory keyManagerFactory, Session.Listener sessionListener, Promise<Session> promise)  {
         final SslContextFactory sslContextFactory = new SslContextFactory(true);
         try {
             //init TrustManager
@@ -73,7 +75,7 @@ public class ApnsClientUtils {
             promise.failed(ex);
             return;
         }
-        client.connect(sslContextFactory, new InetSocketAddress(APNS_HOST, APNS_PORT), sessionListener, promise);
+        client.connect(sslContextFactory, new InetSocketAddress(apnsServerIP, APNS_PORT), sessionListener, promise);
     }
 
     public static void stop(HTTP2Client client) {
