@@ -19,10 +19,12 @@ class SitusCastTargetSource implements ITargetSource {
     private final static Logger logger = LogManager.getLogger(SitusCastTargetSource.class);
     private final String situs;
     private final PushTargetService pushTargetService;
+    private final int maxPusherCount;
 
-    public SitusCastTargetSource(PushTargetService pushTargetService, String situs) {
+    public SitusCastTargetSource(PushTargetService pushTargetService, String situs, int maxPusherCount) {
         this.pushTargetService = pushTargetService;
         this.situs = situs;
+        this.maxPusherCount = maxPusherCount;
     }
 
     @Override
@@ -33,6 +35,8 @@ class SitusCastTargetSource implements ITargetSource {
     }
 
     public int getPusherCount(CastJob job) {
-        return 5;
+        long targetCount = pushTargetService.countBySitusAndProduct(situs, job.getProduct());
+        int count =  (int)(targetCount / pusherCountConst()) + 1;
+        return Math.min(count, maxPusherCount);
     }
 }

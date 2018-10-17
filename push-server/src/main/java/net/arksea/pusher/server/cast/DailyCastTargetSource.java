@@ -4,6 +4,7 @@ import akka.dispatch.Futures;
 import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
+import net.arksea.pusher.server.repository.PushTargetDao;
 import net.arksea.pusher.server.service.DailyCastService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,10 +21,12 @@ public class DailyCastTargetSource implements ITargetSource {
     private final static Logger logger = LogManager.getLogger(DailyCastTargetSource.class);
 
     private final DailyCastService service;
+    private final PushTargetDao pushTargetDao;
     private final int maxPusherCount;
 
-    public DailyCastTargetSource(DailyCastService service,int maxPusherCount) {
+    public DailyCastTargetSource(DailyCastService service,PushTargetDao pushTargetDao,int maxPusherCount) {
         this.service = service;
+        this.pushTargetDao = pushTargetDao;
         this.maxPusherCount = maxPusherCount;
     }
 
@@ -40,6 +43,8 @@ public class DailyCastTargetSource implements ITargetSource {
     }
 
     public int getPusherCount(CastJob job) {
-        return maxPusherCount;
+        long targetCount = pushTargetDao.countByPartitionAndProduct(0, job.getProduct());
+        int count =  (int)(targetCount * Partition.MAX_USER_PARTITION / pusherCountConst()) + 1;
+        return Math.min(count, maxPusherCount);
     }
 }

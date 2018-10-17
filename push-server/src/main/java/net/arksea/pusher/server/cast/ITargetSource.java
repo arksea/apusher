@@ -12,6 +12,9 @@ import java.util.Map;
  * Created by xiaohaixing on 2017/11/10.
  */
 public interface ITargetSource {
+    default int pusherCountConst() {
+        return 100000;
+    }
     Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache);
     default boolean hasPushTargets(CastJob job) {
         return true;
