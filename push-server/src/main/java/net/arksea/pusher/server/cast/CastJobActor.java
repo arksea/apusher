@@ -135,9 +135,7 @@ public class CastJobActor extends AbstractActor {
         logger.info("Start CastJob: {} after {} seconds", this.job.getId(), jobStartDelaySeconds);
         job.setRunning(true);
         beans.castJobService.saveCastJobByServer(job);
-        context().system().scheduler().scheduleOnce(
-            Duration.create(jobStartDelaySeconds,TimeUnit.SECONDS),
-            self(),new CastJobStartDelay(),context().dispatcher(),self());
+        scheduleOnce(jobStartDelaySeconds,TimeUnit.SECONDS,new CastJobStartDelay());
     }
 
     @Override
@@ -175,13 +173,16 @@ public class CastJobActor extends AbstractActor {
         beans.castJobService.saveCastJobByServer(job);
     }
 
+    private void scheduleOnce(int delay, TimeUnit timeUnit, Object msg) {
+        context().system().scheduler().scheduleOnce(Duration.create(delay,timeUnit),
+            self(),msg,context().dispatcher(),self());
+    }
+
     private void handleCastJobStartDelay(CastJobStartDelay msg) throws Exception {
         String pusherName = "castjob-"+job.getId()+"-pusher";
         this.pusher = pusherFactory.create(job.getProduct(), pusherName, pusherCount, context(), tokenStatusListener);
         //延时3秒，防止PushActor刚刚建立连接，不在Avaliable状态
-        context().system().scheduler().scheduleOnce(
-            Duration.create(3,TimeUnit.SECONDS),
-            self(),new PushOne(),context().dispatcher(),self());
+        scheduleOnce(3, TimeUnit.SECONDS, new PushOne());
     }
 
     private void handlePushOne(PushOne msg) throws Exception {
@@ -327,9 +328,7 @@ public class CastJobActor extends AbstractActor {
     private void delayNextPage(boolean isFailedRetry) {
         NextPage nextPage = new NextPage(isFailedRetry);
         if (NEXT_PAGE_DELAY_MILLI > 0) {
-            context().system().scheduler().scheduleOnce(
-                Duration.create(NEXT_PAGE_DELAY_MILLI, TimeUnit.MILLISECONDS),
-                self(), nextPage, context().dispatcher(), self());
+            scheduleOnce(NEXT_PAGE_DELAY_MILLI, TimeUnit.MILLISECONDS, nextPage);
         } else {
             self().tell(nextPage, self());
         }
@@ -355,13 +354,15 @@ public class CastJobActor extends AbstractActor {
         job.setFinishedTime(new Timestamp(System.currentTimeMillis()));
         job.setRunning(false);
         int delay = JOB_FINISHE_DELAY_SECONDS;
-        if (state.submitedEvents.size() > 0) {
+        int size = state.submitedEvents.size();
+        if (size > 0) {
             //如果有已提交推送未收到回执，则多等待一些时间
-            delay = Math.min(delay + state.submitedEvents.size() / 100, JOB_FINISHE_DELAY_SECONDS_MAX);
+            delay = Math.min(delay + 10 + size / 100, JOB_FINISHE_DELAY_SECONDS_MAX);
+            logger.info("CastJob {} delay stop, submitedEvents.size={}, delay={}s",
+                this.job.getId(), size, delay
+            );
         }
-        context().system().scheduler().scheduleOnce(
-            Duration.create(delay,TimeUnit.SECONDS),
-            self(),new JobFinished(status),context().dispatcher(),self());
+        scheduleOnce(delay,TimeUnit.SECONDS,new JobFinished(status));
     }
 
     private void handleJobFinished(JobFinished msg) {
