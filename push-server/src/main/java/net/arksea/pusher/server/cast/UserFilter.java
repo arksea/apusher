@@ -23,7 +23,7 @@ public class UserFilter implements IUserFilter {
             final ScriptEngineManager scriptEngineManager = new ScriptEngineManager();
             this.scriptEngine = scriptEngineManager.getEngineByName("groovy");
             Compilable compilingEngine = (Compilable)this.scriptEngine;
-            this.script = compilingEngine.compile(script);
+            this.script = compilingEngine.compile(script); //todo: 缓存已编译脚本
         }
     }
 

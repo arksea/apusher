@@ -34,6 +34,7 @@ public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
     private static final int JOB_FINISHE_DELAY_SECONDS = 5;
+    private static final int JOB_FINISHE_DELAY_SECONDS_MAX = 30;
     private static final int JOB_START_DELAY_SECONDS = 30;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
@@ -53,6 +54,7 @@ public class CastJobActor extends AbstractActor {
     private final static Random random = new Random(System.currentTimeMillis());
     private final IPushStatusListener tokenStatusListener;
     private int jobStartDelaySeconds;
+    private int pusherCount;
 
     private CastJobActor(State state, JobResources beans, CastJob job, ITargetSource targetSource,
                          UserFilter userFilter, IPusherFactory pusherFactory) {
@@ -71,6 +73,7 @@ public class CastJobActor extends AbstractActor {
         this.targetSource = targetSource;
         this.pusherFactory = pusherFactory;
         this.tokenStatusListener = new PushStatusListener(self(), beans);
+        this.pusherCount = targetSource.getPusherCount(job);
     }
 
     @Override
@@ -88,6 +91,7 @@ public class CastJobActor extends AbstractActor {
             .match(SubmitPushEventTime.class,this::handleSubmitPushEventTime)
             .match(NextPageUseTime.class,this::handleNextPageUseTime)
             .match(ClientAvailableDelay.class, this::handleClientAvailableDelay)
+            .match(CastJobStartDelay.class, this::handleCastJobStartDelay)
             .build();
     }
 
@@ -127,15 +131,13 @@ public class CastJobActor extends AbstractActor {
     @Override
     public void preStart() throws Exception {
         super.preStart();
-        //此延时如果太短，可能Pusher中的PushActor都不在Avaliable状态，所以设置了一个最小值5秒
-        jobStartDelaySeconds = 5 + random.nextInt(JOB_START_DELAY_SECONDS);
+        jobStartDelaySeconds = random.nextInt(JOB_START_DELAY_SECONDS);
         logger.info("Start CastJob: {} after {} seconds", this.job.getId(), jobStartDelaySeconds);
-        int pusherCount = targetSource.getPusherCount(job);
-        String pusherName = "castjob-"+job.getId()+"-pusher";
-        this.pusher = pusherFactory.create(job.getProduct(), pusherName, pusherCount, context(), tokenStatusListener);
         job.setRunning(true);
         beans.castJobService.saveCastJobByServer(job);
-        delayPushNext(jobStartDelaySeconds*1000);
+        context().system().scheduler().scheduleOnce(
+            Duration.create(jobStartDelaySeconds,TimeUnit.SECONDS),
+            self(),new CastJobStartDelay(),context().dispatcher(),self());
     }
 
     @Override
@@ -158,8 +160,9 @@ public class CastJobActor extends AbstractActor {
         super.postStop();
         long jobUseTime = (System.currentTimeMillis() - state.jobStartTime)/1000 - JOB_FINISHE_DELAY_SECONDS - jobStartDelaySeconds;
         Integer allCount = job.getAllCount();
-        logger.info("CastJob stopped: {}, allCount={}, failedCount={}, retryCount={}, sumitedList={}, jobUseTime={}s, nextPageDelay={}s, submitPushEventTime={}s,getTargetsTime={}s,clientAvailableDelay={}s,userFilterTime={}s",
+        logger.info("CastJob stopped: {}, pusherCount={}, allCount={}, failedCount={}, retryCount={}, sumitedList={}, jobUseTime={}s, nextPageDelay={}s, submitPushEventTime={}s,getTargetsTime={}s,clientAvailableDelay={}s,userFilterTime={}s",
             this.job.getId(),
+            this.pusherCount,
             allCount==null?0:allCount,
             this.job.getFailedCount(),
             this.job.getRetryCount(),
@@ -170,6 +173,15 @@ public class CastJobActor extends AbstractActor {
             state.clientAvailableDelay /1000,state.userFilterTime/1000);
         state.payloadCache.clear();
         beans.castJobService.saveCastJobByServer(job);
+    }
+
+    private void handleCastJobStartDelay(CastJobStartDelay msg) throws Exception {
+        String pusherName = "castjob-"+job.getId()+"-pusher";
+        this.pusher = pusherFactory.create(job.getProduct(), pusherName, pusherCount, context(), tokenStatusListener);
+        //延时3秒，防止PushActor刚刚建立连接，不在Avaliable状态
+        context().system().scheduler().scheduleOnce(
+            Duration.create(3,TimeUnit.SECONDS),
+            self(),new PushOne(),context().dispatcher(),self());
     }
 
     private void handlePushOne(PushOne msg) throws Exception {
@@ -339,17 +351,16 @@ public class CastJobActor extends AbstractActor {
         self().tell(new PageTargets(valid), self());
     }
 
-    private void delayPushNext(int delayMilli) {
-        context().system().scheduler().scheduleOnce(
-            Duration.create(delayMilli,TimeUnit.MILLISECONDS),
-            self(),new PushOne(),context().dispatcher(),self());
-    }
-
     private void delayFinishJob(String status) {
         job.setFinishedTime(new Timestamp(System.currentTimeMillis()));
         job.setRunning(false);
+        int delay = JOB_FINISHE_DELAY_SECONDS;
+        if (state.submitedEvents.size() > 0) {
+            //如果有已提交推送未收到回执，则多等待一些时间
+            delay = Math.min(delay + state.submitedEvents.size() / 100, JOB_FINISHE_DELAY_SECONDS_MAX);
+        }
         context().system().scheduler().scheduleOnce(
-            Duration.create(JOB_FINISHE_DELAY_SECONDS,TimeUnit.SECONDS),
+            Duration.create(delay,TimeUnit.SECONDS),
             self(),new JobFinished(status),context().dispatcher(),self());
     }
 
@@ -357,6 +368,9 @@ public class CastJobActor extends AbstractActor {
         context().stop(self());
     }
 
+    //------------------------------------------------------------------------------------------------------------------
+    static class CastJobStartDelay {
+    }
     //----------------------------------------------------------------------------------------------------------
     /**
      * pusher已获得推送平台推送成功的回执应答，可以进行推送成功次数的计数

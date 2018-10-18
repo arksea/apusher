@@ -200,13 +200,20 @@ public class ApnsPushActor extends AbstractActor {
                     @Override
                     public boolean onIdleTimeout(Session session) {
                         logger.warn("ApnsHtt2Client session onIdleTimeout: {}", state.pushActorName);
-                        return false;
+                        return false; //不关闭连接
                     }
 
                     @Override
                     public void onFailure(Session session, Throwable failure) {
                         logger.warn("ApnsHtt2Client session onFailure: {}", state.pushActorName, failure);
                         delayConnect();
+                    }
+
+                    @Override
+                    public void onPing(Session session, PingFrame frame) {
+                        if (!frame.isReply()) {
+                            logger.warn("ApnsHtt2Client session received ping frame: {}", state.pushActorName);
+                        }
                     }
                 },
                 new Promise<Session>() {
@@ -239,7 +246,12 @@ public class ApnsPushActor extends AbstractActor {
     private static class Ping {}
     private void handlePing(Ping msg) {
         if (apnsClient != null && session != null && apnsClient.isRunning() && !apnsClient.isFailed()) {
-            ApnsClientUtils.ping(session, new Callback() {});
+            ApnsClientUtils.ping(session, new Callback() {
+                public void failed(Throwable ex) {
+                    logger.warn("ApnsHtt2Client session ping failed: {}", state.pushActorName, ex);
+                    delayConnect();
+                }
+            });
         }
     }
 
