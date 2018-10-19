@@ -34,6 +34,7 @@ public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
     private static final int JOB_FINISHE_DELAY_SECONDS = 10;
+    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 30;
     private static final int JOB_START_DELAY_SECONDS = 30;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
@@ -53,7 +54,10 @@ public class CastJobActor extends AbstractActor {
     private final static Random random = new Random(System.currentTimeMillis());
     private final IPushStatusListener tokenStatusListener;
     private int jobStartDelaySeconds;
+    private int jobStopDelaySeconds;
+    private int waitForReplySeconds;
     private int pusherCount;
+    private int noReplyEventCount; //首次进入任务结束流程时，未收到回复的推送事件数
 
     private CastJobActor(State state, JobResources beans, CastJob job, ITargetSource targetSource,
                          UserFilter userFilter, IPusherFactory pusherFactory) {
@@ -155,16 +159,19 @@ public class CastJobActor extends AbstractActor {
     @Override
     public void postStop() throws Exception {
         super.postStop();
-        long jobUseTime = (System.currentTimeMillis() - state.jobStartTime)/1000 - JOB_FINISHE_DELAY_SECONDS - jobStartDelaySeconds;
+        long jobUseTime = (System.currentTimeMillis() - state.jobStartTime)/1000 - jobStopDelaySeconds - jobStartDelaySeconds;
         Integer allCount = job.getAllCount();
-        logger.info("CastJob stopped: {}, pusherCount={}, allCount={}, failedCount={}, retryCount={}, sumitedList={}, jobUseTime={}s, nextPageDelay={}s, submitPushEventTime={}s,getTargetsTime={}s,clientAvailableDelay={}s,userFilterTime={}s",
+        logger.info("CastJob stopped: {}, pusherCount={}, allCount={}, failedCount={}, retryCount={}, noReplyEventCount={}, sumitedList={}, " +
+                "jobUseTime={}s, jobStopDelay={}s, nextPageDelay={}s, submitPushEventTime={}s,getTargetsTime={}s,clientAvailableDelay={}s,userFilterTime={}s",
             this.job.getId(),
             this.pusherCount,
             allCount==null?0:allCount,
             this.job.getFailedCount(),
             this.job.getRetryCount(),
-            state.submitedEvents.size(),
+            noReplyEventCount,           //首次进入任务结束流程时，未收到回复的推送事件数
+            state.submitedEvents.size(), //延迟结束任务后还剩余的没有收到回复的推送事件数
             jobUseTime,
+            jobStopDelaySeconds,
             state.nextPageDelay/1000,
             state.submitPushEventTime/1000,state.getTargetsTime/1000,
             state.clientAvailableDelay /1000,state.userFilterTime/1000);
@@ -351,16 +358,27 @@ public class CastJobActor extends AbstractActor {
 
     //延迟结束任务，等待submitEvent中已提交推送回执消息
     private void delayFinishJob(String status) {
-        job.setFinishedTime(new Timestamp(System.currentTimeMillis()));
-        job.setRunning(false);
         scheduleOnce(JOB_FINISHE_DELAY_SECONDS,TimeUnit.SECONDS,new JobFinished(status));
     }
 
+    private void finishJob() {
+        job.setFinishedTime(new Timestamp(System.currentTimeMillis()));
+        job.setRunning(false);
+        context().stop(self());
+    }
+
     private void handleJobFinished(JobFinished msg) {
+        if (jobStopDelaySeconds == 0) {
+            noReplyEventCount = state.submitedEvents.size();
+        }
+        this.jobStopDelaySeconds += JOB_FINISHE_DELAY_SECONDS;
+        this.waitForReplySeconds += JOB_FINISHE_DELAY_SECONDS;
         if (state.submitedEvents.size() == 0) {
-            context().stop(self());
+            finishJob();
+        } else if (waitForReplySeconds < MAX_WAIT_FOR_REPLY_SECONDS) {
+            delayFinishJob(msg.status);
         } else {
-            //没有收到回执消息的推送将被重发，任务继续执行
+            //没有收到回执消息的推送将被重发，有可能造成少量重复的推送消息，任务继续执行
             for (PushEvent e : state.submitedEvents) {
                 if (e.getRetryCount() < MAX_RETRY_PUSH) {
                     state.retryEvents.add(e);
@@ -375,6 +393,7 @@ public class CastJobActor extends AbstractActor {
                 }
             }
             state.submitedEvents.clear();
+            this.waitForReplySeconds = 0;
             pushNext();
         }
     }
