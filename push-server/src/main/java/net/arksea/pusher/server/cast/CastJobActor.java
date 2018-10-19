@@ -33,8 +33,7 @@ import java.util.concurrent.TimeUnit;
 public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
-    private static final int JOB_FINISHE_DELAY_SECONDS = 5;
-    private static final int JOB_FINISHE_DELAY_SECONDS_MAX = 30;
+    private static final int JOB_FINISHE_DELAY_SECONDS = 10;
     private static final int JOB_START_DELAY_SECONDS = 30;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
@@ -350,23 +349,34 @@ public class CastJobActor extends AbstractActor {
         self().tell(new PageTargets(valid), self());
     }
 
+    //延迟结束任务，等待submitEvent中已提交推送回执消息
     private void delayFinishJob(String status) {
         job.setFinishedTime(new Timestamp(System.currentTimeMillis()));
         job.setRunning(false);
-        int delay = JOB_FINISHE_DELAY_SECONDS;
-        int size = state.submitedEvents.size();
-        if (size > 0) {
-            //如果有已提交推送未收到回执，则多等待一些时间
-            delay = Math.min(delay + 10 + size / 100, JOB_FINISHE_DELAY_SECONDS_MAX);
-            logger.info("CastJob {} delay stop, submitedEvents.size={}, delay={}s",
-                this.job.getId(), size, delay
-            );
-        }
-        scheduleOnce(delay,TimeUnit.SECONDS,new JobFinished(status));
+        scheduleOnce(JOB_FINISHE_DELAY_SECONDS,TimeUnit.SECONDS,new JobFinished(status));
     }
 
     private void handleJobFinished(JobFinished msg) {
-        context().stop(self());
+        if (state.submitedEvents.size() == 0) {
+            context().stop(self());
+        } else {
+            //没有收到回执消息的推送将被重发，任务继续执行
+            for (PushEvent e : state.submitedEvents) {
+                if (e.getRetryCount() < MAX_RETRY_PUSH) {
+                    state.retryEvents.add(e);
+                } else {
+                    int all = 1;
+                    if (job.getAllCount() != null) {
+                        all = job.getAllCount() + 1;
+                    }
+                    this.job.setAllCount(all);
+                    int failed = job.getFailedCount() + 1;
+                    this.job.setFailedCount(failed);
+                }
+            }
+            state.submitedEvents.clear();
+            pushNext();
+        }
     }
 
     //------------------------------------------------------------------------------------------------------------------

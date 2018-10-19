@@ -33,6 +33,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  *
@@ -146,60 +148,62 @@ public class ApnsClientUtils {
     static class ResponseListener extends Stream.Listener.Adapter {
         private final IPushStatusListener statusListener;
         private final PushEvent event;
+        //原子操作是为了防止 onHeaders 和 onData不在同一个线程中回调
+        private AtomicInteger status = new AtomicInteger(-1);
+        //测试onHeaders 和 onData是否可能不在同一个线程中回调，目前没有观察到此现象
+        private AtomicLong onHeaderThreadId = new AtomicLong(0);
         public ResponseListener(PushEvent event, IPushStatusListener statusListener) {
             this.statusListener = statusListener;
             this.event = event;
         }
 
-        HeadersFrame headersFrame = null;
         @Override
         public void onHeaders(Stream stream, HeadersFrame frame) {
             log.debug("StreamListener.onHeader(),{}",frame.getMetaData());
-            headersFrame = frame;
-            MetaData meta = headersFrame.getMetaData();
+            MetaData meta = frame.getMetaData();
             if (meta.isResponse()) {
                 MetaData.Response response = (MetaData.Response)meta;
-                int status = response.getStatus();
-                if (status == 200) {
+                status.set(response.getStatus());
+                onHeaderThreadId.set(Thread.currentThread().getId());
+                if (response.getStatus() == 200) {
                     statusListener.onSucceed(event);
                 }
                 //此处不回调，留到onData里判断返回的错误reason后再回调
                 //else {
                     //statusListener.onFailed(event);
                 //}
+            } else {
+                log.warn("header is not response"); //不会收到非Response的Header，目前未观察到例外
             }
         }
 
         @Override
         public void onData(Stream stream, DataFrame frame, Callback callback) {
             log.debug("StreamListener.onData()");
+            if(onHeaderThreadId.get() != Thread.currentThread().getId()) {
+                //onHeader 和 onData是同一个线程回调，目前没有观察到例外
+                log.warn("OnHeaders() and onData() not in same Thread");
+            }
             ByteBuffer buf = frame.getData();
             String body = Charset.forName("UTF-8").decode(buf).toString();
-            if (headersFrame == null) {
-                return;
-            }
-            MetaData meta = headersFrame.getMetaData();
-            if (meta.isResponse()) {
-                MetaData.Response response = (MetaData.Response)meta;
-                int status = response.getStatus();
-                String msg = "status="+status+";body="+body;
-                if (status == 200) {
-                    //status==200时没有onData，目前未观察到例外
-                    log.debug("onData when succeed: {};eventId={}, topic={},token={}", msg,event.id, event.topic,event.token);
-                    callback.succeeded();
-                } else {
-                    try {
-                        Map ret = objectMapper.readValue(body, Map.class);
-                        String reason = (String)ret.get("reason");
-                        log.trace("apns push failed: {};eventId={},topic={},token={}",msg,event.id,event.topic,event.token);
-                        statusListener.onFailed(status, reason, event);
-                    } catch (IOException ex) {
-                        log.error("parse apns resule failed: "+body, ex);
-                        statusListener.onFailed(status, ex, event);
-                    }
-                    callback.failed(new Exception(msg));
+            String msg = "status="+status+";body="+body;
+            if (status.get() == 200) {
+                //status==200时不会有onData，目前未观察到例外
+                log.warn("onData when succeed: {};eventId={}, topic={},token={}", msg,event.id, event.topic,event.token);
+                callback.succeeded();
+            } else {
+                try {
+                    Map ret = objectMapper.readValue(body, Map.class);
+                    String reason = (String)ret.get("reason");
+                    log.trace("apns push failed: {};eventId={},topic={},token={}",msg,event.id,event.topic,event.token);
+                    statusListener.onFailed(status.get(), reason, event);
+                } catch (IOException ex) {
+                    log.error("parse apns resule failed: "+body, ex);
+                    statusListener.onFailed(status.get(), ex, event);
                 }
+                callback.failed(new Exception(msg));
             }
+
         }
     };
 
