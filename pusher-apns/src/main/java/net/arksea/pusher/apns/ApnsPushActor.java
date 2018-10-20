@@ -234,7 +234,9 @@ public class ApnsPushActor extends AbstractActor {
     //------------------------------------------------------------------------------------
     public static class AvailableReply {}
     private void handleAvailableReply(AvailableReply msg) {
-        sender().tell(isAvailable(), self());
+        if (isAvailable()) {
+            sender().tell(self(), self());
+        }
     }
     private boolean isAvailable() {
         return apnsClient != null && session != null  && ApnsClientUtils.isAvailable(session)
