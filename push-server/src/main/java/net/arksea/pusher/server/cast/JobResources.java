@@ -5,6 +5,7 @@ import net.arksea.pusher.server.service.DailyCastService;
 import net.arksea.pusher.server.service.UserDailyCastService;
 import net.arksea.pusher.server.service.PushTargetService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,4 +24,7 @@ public class JobResources {
 
     @Autowired
     public DailyCastService dailyCastService;
+
+    @Value("${push.resendNoReplyEvent}")
+    boolean resendNoReplyEvent;
 }

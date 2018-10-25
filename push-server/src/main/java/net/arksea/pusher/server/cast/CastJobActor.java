@@ -434,24 +434,27 @@ public class CastJobActor extends AbstractActor {
         } else if (waitForReplySeconds < MAX_WAIT_FOR_REPLY_SECONDS) {
             delayFinishJob(msg.status);
         } else {
-            finishJob();
-//            //没有收到回执消息的推送将被重发，有可能造成少量重复的推送消息，任务继续执行
-//            for (PushEvent e : state.submitedEvents) {
-//                if (e.getRetryCount() < MAX_RETRY_PUSH) {
-//                    state.retryEvents.add(e);
-//                } else {
-//                    int all = 1;
-//                    if (job.getAllCount() != null) {
-//                        all = job.getAllCount() + 1;
-//                    }
-//                    this.job.setAllCount(all);
-//                    int failed = job.getFailedCount() + 1;
-//                    this.job.setFailedCount(failed);
-//                }
-//            }
-//            state.submitedEvents.clear();
-//            this.waitForReplySeconds = 0;
-//            pushNext();
+            if (beans.resendNoReplyEvent) {
+                //没有收到回执消息的推送将被重发，有可能造成少量重复的推送消息，任务继续执行
+                for (PushEvent e : state.submitedEvents) {
+                    if (e.getRetryCount() < MAX_RETRY_PUSH) {
+                        state.retryEvents.add(e);
+                    } else {
+                        int all = 1;
+                        if (job.getAllCount() != null) {
+                            all = job.getAllCount() + 1;
+                        }
+                        this.job.setAllCount(all);
+                        int failed = job.getFailedCount() + 1;
+                        this.job.setFailedCount(failed);
+                    }
+                }
+                state.submitedEvents.clear();
+                this.waitForReplySeconds = 0;
+                _pushOne();
+            } else {
+                finishJob();
+            }
         }
     }
 
