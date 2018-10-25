@@ -33,9 +33,9 @@ import java.util.concurrent.TimeUnit;
 public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
-    private static final int JOB_FINISHE_DELAY_SECONDS = 10;
-    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 30;
-    private static final int JOB_START_DELAY_SECONDS = 30;
+    private static final int JOB_FINISHE_DELAY_SECONDS = 5;
+    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 60;
+    private static final int JOB_START_DELAY_SECONDS = 45;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
     private static final int MAX_RETRY_NEXTPAGE = 5;
@@ -91,9 +91,8 @@ public class CastJobActor extends AbstractActor {
             .match(NextPage.class,     this::handleNextPage)
             .match(PageTargets.class,  this::handlePageTargets)
             .match(JobFinished.class,  this::handleJobFinished)
-            .match(SubmitPushEventTime.class,this::handleSubmitPushEventTime)
             .match(NextPageUseTime.class,this::handleNextPageUseTime)
-            .match(ClientAvailableDelay.class, this::handleClientAvailableDelay)
+            .match(SubmitPushEventFailed.class, this::handleSubmitPushEventFailed)
             .match(CastJobStartDelay.class, this::handleCastJobStartDelay)
             .build();
     }
@@ -191,8 +190,11 @@ public class CastJobActor extends AbstractActor {
         scheduleOnce(3, TimeUnit.SECONDS, new PushOne());
     }
 
-    private void handlePushOne(PushOne msg) throws Exception {
-        logger.trace("call pushOne()");
+    private void handlePushOne(PushOne msg) {
+        logger.trace("call handlePushOne()");
+        _pushOne();
+    }
+    private void _pushOne() {
         Iterator<PushEvent> it = state.retryEvents.iterator();
         if (it.hasNext()) {
             _pushOneRetryEvent(it.next());
@@ -203,12 +205,15 @@ public class CastJobActor extends AbstractActor {
             _pushOneTarget(t);
         }
     }
-    private void _pushOneRetryEvent(PushEvent event) throws Exception {
+    private void _pushOneRetryEvent(PushEvent event) {
         _doPush(event, new RetrySucceed(event));
     }
-    private void _pushOneTarget(PushTarget t) throws Exception {
+    private void _pushOneTarget(PushTarget t) {
         String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
+        //每此尝试向一个Target推送，都会新建PushEvent
+        //所以要保障不向submitedEvents重复add相同target的event：
+        //所以当一个Target尝试submit失败时，需要将add到submitedEvents中的event移除（handleSubmitPushEventFailed就是干这个的）
         PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
             t.getProduct(),
             t.getToken(),
@@ -218,70 +223,120 @@ public class CastJobActor extends AbstractActor {
             isTestEvent);
         _filterUser(t, event);
     }
-    private void _filterUser(PushTarget t, PushEvent event) throws Exception {
+    private void _filterUser(PushTarget t, PushEvent event) {
         long start = System.currentTimeMillis();
         if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
-            _doPush(event,new TargetSucceed(t, event));
-        } else { //被过滤不符合发送条件的用户只做总量计数， 所以 过滤量=总数-成功数-失败数
-            int all = 1;
-            if (job.getAllCount() != null) {
-                all = job.getAllCount() + 1;
-            }
-            this.job.setAllCount(all);
+            _doPush(event,new TargetSucceed(t));
+        } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);
         }
         long time = System.currentTimeMillis() - start;
         state.userFilterTime += time;
     }
-    private void _doPush(PushEvent event, Object succeedMsg) throws Exception {
+    private void _doPush(PushEvent event, Object succeedMsg) {
         final long start = System.currentTimeMillis();
+        state.submitedEvents.add(event);
         pusher.push(event).onComplete(FutureUtils.completer(
             (ex, result) -> {
                 long time = System.currentTimeMillis() - start;
                 if(ex == null) {
-                    submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
                     if (result) {
                         self().tell(succeedMsg, self());
                     } else { //result为false表示提交推送事件失败(PushActor处于不可用状态)
-                        pushNext();
+                        self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                     }
-                    self().tell(new SubmitPushEventTime(time), ActorRef.noSender());
                 } else { //超时异常表示没有可用PushActor，其他异常表示提交失败
-                    if (submitFailedBeginTime <= 0) {
-                        submitFailedBeginTime = start;
-                    }
-                    long minutes = (start - submitFailedBeginTime) / 60000;
-                    if (minutes > 10) { //持续10分钟以上不能提交推送事件，则退出本次推送任务
-                        delayFinishJob("It is not possible to submit push events for more than " + minutes + " minutes");
-                    } else {
-                        pushNext();
-                        self().tell(new ClientAvailableDelay(time), ActorRef.noSender());
-                    }
+                    self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                 }
             }
         ), context().dispatcher());
-        state.submitedEvents.add(event);
+    }
+
+    //------------------------------------------------------------------------------------------------------------------
+    /**
+     * targets列表中的的推送已正确提交的Pusher，可以开始下一轮推送
+     */
+    private static class TargetSucceed {
+        final PushTarget target;
+        final long startTime;
+
+        private TargetSucceed(PushTarget target) {
+            this.target = target;
+            this.startTime = System.currentTimeMillis();
+        }
     }
 
     private void handleTargetSucceed(TargetSucceed msg) {
+        submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
+        state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
+        //提交成功才做总量计数
+        int all = 1;
+        if (job.getAllCount() != null) {
+            all = job.getAllCount() + 1;
+        }
+        this.job.setAllCount(all);
         targetSucceed(msg.target);
     }
+    //完成一个target的处理（推送或不送）、设置job进度，并开始下个target的处理
     private void targetSucceed(PushTarget t) {
         PushTarget t1 = state.targets.remove(0);
         if (!t.getId().equals(t1.getId())) {
-            logger.warn("assert failed: the removed target is not specified target");
+            logger.fatal("assert failed: the removed target is not specified target");
         }
         job.setLastUserId(t1.getUserId());
-        pushNext();
+        _pushOne();
+    }
+    //------------------------------------------------------------------------------------------------------------------
+    /**
+     * retry列表中的推送事件已正确提交到Pusher，可以开始下一轮推送
+     */
+    private static class RetrySucceed {
+        final PushEvent event;
+        final long startTime;
+
+        RetrySucceed(PushEvent event) {
+            this.event = event;
+            this.startTime = System.currentTimeMillis();
+        }
     }
 
     private void handleRetrySucceed(RetrySucceed msg) {
         state.retryEvents.remove(msg.event);
         msg.event.incRetryCount();
         job.setRetryCount(job.getRetryCount()+1);
-        pushNext();
+        _pushOne();
     }
 
+    //------------------------------------------------------------------------------------------------------------------
+    /**
+     * 提交PushEvent到pusher是因没有pusher处于available而失败
+     */
+    static class SubmitPushEventFailed {
+        final PushEvent event;
+        final long time;
+        SubmitPushEventFailed(PushEvent event, long time) {
+            this.event = event;
+            this.time = time;
+        }
+    }
+    private void handleSubmitPushEventFailed(SubmitPushEventFailed msg) {
+        boolean removed = state.submitedEvents.remove(msg.event);
+        if (!removed) {
+            logger.warn("assert failed: event not in submited list!");
+        }
+        long now = System.currentTimeMillis();
+        if (submitFailedBeginTime <= 0) {
+            submitFailedBeginTime = now;
+        }
+        state.clientAvailableDelay += msg.time;
+        long minutes = (now - submitFailedBeginTime) / 60000;
+        if (minutes > 10) { //持续10分钟以上不能提交推送事件，则退出本次推送任务
+            delayFinishJob("It is not possible to submit push events for more than " + minutes + " minutes");
+        } else {
+            _pushOne();
+        }
+    }
+    //------------------------------------------------------------------------------------------------------------------
     private void handleNextPage(NextPage msg) {
         logger.trace("call nextPage(msg), partition={}", job.getLastPartition());
         state.nextPageDelay += NEXT_PAGE_DELAY_MILLI;
@@ -324,10 +379,14 @@ public class CastJobActor extends AbstractActor {
             job.setLastPartition(partition);
             //修改partition必须重新设置userId，否则可能会将一个分区的uid设置到另一个分区上，这可能会造成遗漏部分用户
             job.setLastUserId(null);
+            long start = System.currentTimeMillis();
             beans.castJobService.saveCastJobByServer(job);
+            // 计入nextPageDelay，这样可以通过计算得到保存job状态花费的时间：
+            // nextPageDealy - 1024*NEXT_PAGE_DELAY_MILLI
+            state.nextPageDelay += System.currentTimeMillis() - start;
             delayNextPage(false);
         } else {
-            pushNext();
+            _pushOne();
         }
     }
 
@@ -340,9 +399,6 @@ public class CastJobActor extends AbstractActor {
         }
     }
 
-    private void pushNext() {
-        self().tell(new PushOne(), self());
-    }
     private void getPageTargetsSucceed(List<PushTarget> targets) {
         List<PushTarget> valid = new LinkedList<>();
         for (PushTarget t: targets) {
@@ -378,24 +434,27 @@ public class CastJobActor extends AbstractActor {
         } else if (waitForReplySeconds < MAX_WAIT_FOR_REPLY_SECONDS) {
             delayFinishJob(msg.status);
         } else {
-            finishJob();
-//            //没有收到回执消息的推送将被重发，有可能造成少量重复的推送消息，任务继续执行
-//            for (PushEvent e : state.submitedEvents) {
-//                if (e.getRetryCount() < MAX_RETRY_PUSH) {
-//                    state.retryEvents.add(e);
-//                } else {
-//                    int all = 1;
-//                    if (job.getAllCount() != null) {
-//                        all = job.getAllCount() + 1;
-//                    }
-//                    this.job.setAllCount(all);
-//                    int failed = job.getFailedCount() + 1;
-//                    this.job.setFailedCount(failed);
-//                }
-//            }
-//            state.submitedEvents.clear();
-//            this.waitForReplySeconds = 0;
-//            pushNext();
+            if (beans.resendNoReplyEvent) {
+                //没有收到回执消息的推送将被重发，有可能造成少量重复的推送消息，任务继续执行
+                for (PushEvent e : state.submitedEvents) {
+                    if (e.getRetryCount() < MAX_RETRY_PUSH) {
+                        state.retryEvents.add(e);
+                    } else {
+                        int all = 1;
+                        if (job.getAllCount() != null) {
+                            all = job.getAllCount() + 1;
+                        }
+                        this.job.setAllCount(all);
+                        int failed = job.getFailedCount() + 1;
+                        this.job.setFailedCount(failed);
+                    }
+                }
+                state.submitedEvents.clear();
+                this.waitForReplySeconds = 0;
+                _pushOne();
+            } else {
+                finishJob();
+            }
         }
     }
 
@@ -418,11 +477,6 @@ public class CastJobActor extends AbstractActor {
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
         }
-        int all = 1;
-        if (job.getAllCount() != null) {
-            all = job.getAllCount() + 1;
-        }
-        this.job.setAllCount(all);
         int succeed = 1;
         if (job.getSucceedCount() != null) {
             succeed = job.getSucceedCount() + 1;
@@ -450,11 +504,6 @@ public class CastJobActor extends AbstractActor {
         if (msg.event.getRetryCount() < MAX_RETRY_PUSH) {
             state.retryEvents.add(msg.event);
         } else {
-            int all = 1;
-            if (job.getAllCount() != null) {
-                all = job.getAllCount() + 1;
-            }
-            this.job.setAllCount(all);
             int failed = job.getFailedCount() + 1;
             this.job.setFailedCount(failed);
         }
@@ -492,61 +541,11 @@ public class CastJobActor extends AbstractActor {
         }
     }
 
-    /**
-     * retry列表中的推送事件已正确提交到Pusher，可以开始下一轮推送
-     */
-    private static class RetrySucceed {
-        final PushEvent event;
-
-        RetrySucceed(PushEvent event) {
-            this.event = event;
-        }
-    }
-
-    /**
-     * targets列表中的的推送已正确提交的Pusher，可以开始下一轮推送
-     */
-    private static class TargetSucceed {
-        final PushTarget target;
-        final PushEvent event;
-
-        private TargetSucceed(PushTarget target, PushEvent event) {
-            this.target = target;
-            this.event = event;
-        }
-    }
-
     private static class JobFinished{
         final String status;
         JobFinished(String status) {
             this.status = status;
         }
-    }
-    //------------------------------------------------------------------------------------------------------------------
-    /**
-     * 统计提交PushEvent到pusher的用时
-     */
-    static class SubmitPushEventTime {
-        final long time;
-        SubmitPushEventTime(long time) {
-            this.time = time;
-        }
-    }
-    private void handleSubmitPushEventTime(SubmitPushEventTime msg) {
-        state.submitPushEventTime += msg.time;
-    }
-    //------------------------------------------------------------------------------------------------------------------
-    /**
-     * 统计提交PushEvent到pusher的用时
-     */
-    static class ClientAvailableDelay {
-        public final long time;
-        ClientAvailableDelay(long time) {
-            this.time = time;
-        }
-    }
-    void handleClientAvailableDelay(ClientAvailableDelay msg) {
-        state.clientAvailableDelay += msg.time;
     }
     //------------------------------------------------------------------------------------------------------------------
     static class NextPageUseTime {

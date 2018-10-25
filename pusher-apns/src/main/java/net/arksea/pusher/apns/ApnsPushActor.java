@@ -31,12 +31,13 @@ public class ApnsPushActor extends AbstractActor {
     private static final int BACKOFF_MIN = 3000;
 
     private static final int PING_DELAY_SECONDS = 5;
-
+    private int pingFailedCount = 0;
     private final State state;
 
     private HTTP2Client apnsClient;
     private Session session;
     private Cancellable pingTimer;
+    private Cancellable delayConnectTimer;
     private LifeCycle.Listener clientLifeCycleListener;
     public ApnsPushActor(State state) {
         this.state = state;
@@ -50,14 +51,14 @@ public class ApnsPushActor extends AbstractActor {
             .match(PushEvent.class,      this::handleApnsEvent)
             .match(Ping.class,           this::handlePing)
             .match(Connect.class,        this::handleConnect)
-            .match(DelayConnect.class,   this::handleDelayConnect)
+            .match(Reconnect.class,   this::handleReconnect)
             .match(ConnectSucceed.class, this::handleConnectSucceed)
-            .match(CreateClient.class,   this::handleCreateClient)
+            .match(PingFailed.class, this::handlePingFailed)
             .build();
     }
 
     static class State {
-        int connectDelay = BACKOFF_MIN;
+        int connectDelay;
         final String pushActorName;
         final String apnsServerIP;
         final String apnsTopic;
@@ -87,40 +88,23 @@ public class ApnsPushActor extends AbstractActor {
     public void preStart() throws Exception {
         super.preStart();
         logger.debug("ApnsPushActor started: {}", state.pushActorName);
-        pingTimer = context().system().scheduler().schedule(
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
-            self(),new Ping(),context().dispatcher(),self());
-        createApnsClient();
+        delayConnect();
     }
-
-    //------------------------------------------------------------------------------------
-    private void createApnsClient() {
-        try {
+    private void delayConnect() throws Exception {
+        //null判断用于防止多次重复调用reconnect()引起不必要的频繁重连（多次通讯失败的回调可能会集中在一个时间点发生）
+        if (delayConnectTimer == null) {
             stopApnsClient();
-            apnsClient = ApnsClientUtils.create(clientLifeCycleListener);
-            state.connectDelay = BACKOFF_MIN; //连接成功重置退避时间
-            delayConnect();
-        } catch (Exception ex) {
-            logger.warn("create ApnsClient failed: {}",state.pushActorName,  ex);
-            delayCreateClient();
+            int backoff = state.connectDelay;
+            state.connectDelay = Math.max(BACKOFF_MIN, Math.min(backoff * 2, BACKOFF_MAX));
+            if (backoff == 0) {
+                connect();
+            } else {
+                delayConnectTimer = context().system().scheduler().scheduleOnce(
+                    Duration.create(backoff, TimeUnit.MILLISECONDS),
+                    self(), new Connect(), context().dispatcher(), self());
+            }
         }
     }
-    private void delayCreateClient() {
-        logger.trace("call delayCreateClient()");
-        int backoff = state.connectDelay;
-        state.connectDelay = Math.min(backoff*2, BACKOFF_MAX);
-        context().system().scheduler().scheduleOnce(
-            Duration.create(backoff, TimeUnit.MILLISECONDS),
-            self(), new CreateClient(), context().dispatcher(), self());
-    }
-    private static class CreateClient {
-    }
-    private void handleCreateClient(CreateClient msg) {
-        logger.trace("call handleCreateClient()");
-        createApnsClient();
-    }
-
     //------------------------------------------------------------------------------------
     @Override
     public void postStop() throws Exception {
@@ -158,38 +142,32 @@ public class ApnsPushActor extends AbstractActor {
             sender().tell(false, self());
         }
     }
+
     //------------------------------------------------------------------------------------
-    private static class DelayConnect {}
-    private void handleDelayConnect(DelayConnect msg) {
-        logger.trace("call handleDelayConnect()");
-        if (session != null) {
-            session.close(1, null, new Callback() {});
-            session = null;
-        }
-        int backoff = state.connectDelay;
-        state.connectDelay = Math.min(backoff*2, BACKOFF_MAX);
-        context().system().scheduler().scheduleOnce(
-                Duration.create(backoff, TimeUnit.MILLISECONDS),
-                self(), new Connect(), context().dispatcher(), self());
+    private static class Reconnect {}
+    private void handleReconnect(Reconnect msg) throws Exception {
+        logger.trace("call handleReconnect()");
+        delayConnect();
     }
-    private void delayConnect() {
-        logger.trace("call delayConnect()");
-        self().tell(new DelayConnect(), ActorRef.noSender());
+    private void reconnect() {
+        logger.trace("call reconnect()");
+        self().tell(new Reconnect(), ActorRef.noSender());
     }
     //------------------------------------------------------------------------------------
     private static class Connect {}
-    private void handleConnect(Connect msg) {
+    private void handleConnect(Connect msg) throws Exception {
         logger.trace("call handleConnect()");
+        delayConnectTimer = null;
         connect();
     }
-
-    private void connect() {
+    private void connect() throws Exception {
+        apnsClient = ApnsClientUtils.create(clientLifeCycleListener);
         ApnsClientUtils.connect(state.apnsServerIP, apnsClient, state.keyManagerFactory,
                 new Session.Listener.Adapter() {
                     @Override
                     public void onReset(Session session, ResetFrame frame) {
                         logger.warn("ApnsHtt2Client session onReset: {}", state.pushActorName);
-                        delayConnect();
+                        reconnect();
                     }
 
                     @Override
@@ -206,7 +184,7 @@ public class ApnsPushActor extends AbstractActor {
                     @Override
                     public void onFailure(Session session, Throwable failure) {
                         logger.warn("ApnsHtt2Client session onFailure: {}", state.pushActorName, failure);
-                        delayConnect();
+                        reconnect();
                     }
 
                     @Override
@@ -226,7 +204,7 @@ public class ApnsPushActor extends AbstractActor {
                     @Override
                     public void failed(Throwable x) {
                         logger.warn("ApnsHtt2Client connect failed: {}", state.pushActorName, x);
-                        delayConnect();
+                        reconnect();
                     }
                 });
     }
@@ -245,16 +223,24 @@ public class ApnsPushActor extends AbstractActor {
     //------------------------------------------------------------------------------------
     private static class Ping {}
     private void handlePing(Ping msg) {
+        ActorRef actor = self();
         if (apnsClient != null && session != null && apnsClient.isRunning() && !apnsClient.isFailed()) {
             ApnsClientUtils.ping(session, new Callback() {
                 public void failed(Throwable ex) {
                     logger.warn("ApnsHtt2Client session ping failed: {}", state.pushActorName, ex);
-                    delayConnect();
+                    actor.tell(new PingFailed(), ActorRef.noSender());
                 }
             });
         }
     }
 
+    private static class PingFailed {}
+    private void handlePingFailed(PingFailed msg) throws Exception {
+        if (++pingFailedCount >= 3) {
+            pingFailedCount = 0;
+            delayConnect();
+        }
+    }
     //------------------------------------------------------------------------------------
     private static class ConnectSucceed {
         public final Session session;
@@ -266,6 +252,10 @@ public class ApnsPushActor extends AbstractActor {
         this.session = msg.session;
         //重置连接的退避时间
         state.connectDelay = BACKOFF_MIN;
+        pingTimer = context().system().scheduler().schedule(
+            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            self(),new Ping(),context().dispatcher(),self());
     }
 
     static class ClientLifeCycleListener implements LifeCycle.Listener {
