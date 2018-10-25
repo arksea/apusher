@@ -76,17 +76,20 @@ public class ApnsPusher implements IPusher {
         return apnsServerAddrArray[(random.nextInt(apnsServerAddrArray.length - 1))].getHostAddress();
     }
     /**
+     * 提交成功就返回结果，而非等收到APNS推送回执结果才返回，是为了提高推送吞吐率，减少快慢设备间的阻塞。
+     * APNS推送回执结果将通过回调接口pushStatusListener异步通知CastJobActor，CastJobActor收到回执
+     * 结果会进行相应的计数处理，同时移除submitedEvents中的event，当任务结束时，submitedEvent还有
+     * 内容就表示这些推送没有收到明确的成功或失败应答（通常是网络连接中断造成）
      * @param event
-     * @return 返回true表示推送提交成功，超时异常表示没有可用client，false表示推送失败
+     * @return 返回true表示提交给PushActor成功，false表示PushActor不可用， 超时异常表示没有可用PushActor
      */
     public Future<Boolean> push(PushEvent event) {
         Future<ActorRef> future = askAvailablePuseActor();
         return future.flatMap(
             mapper(pushActor ->
-            Patterns.ask(pushActor, event, timeout).mapTo(classTag(Boolean.class)).map(
-                mapper(ret -> ret),actorRefFactory.dispatcher()
-            )
-        ),actorRefFactory.dispatcher());
+                Patterns.ask(pushActor, event, timeout).mapTo(classTag(Boolean.class))
+            ),actorRefFactory.dispatcher()
+        );
     }
     public static <T,R> Mapper<T,R> mapper(Function<T,R> func) {
         return new Mapper<T, R>() {

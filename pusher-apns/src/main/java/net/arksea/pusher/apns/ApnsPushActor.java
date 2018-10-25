@@ -37,6 +37,7 @@ public class ApnsPushActor extends AbstractActor {
     private HTTP2Client apnsClient;
     private Session session;
     private Cancellable pingTimer;
+    private Cancellable delayConnectTimer;
     private LifeCycle.Listener clientLifeCycleListener;
     public ApnsPushActor(State state) {
         this.state = state;
@@ -158,7 +159,9 @@ public class ApnsPushActor extends AbstractActor {
             sender().tell(false, self());
         }
     }
+
     //------------------------------------------------------------------------------------
+    //todo: 这种两失败阶段处理太繁琐复杂，改造成延迟重启Actor，重启后直接创建client并直接连接
     private static class DelayConnect {}
     private void handleDelayConnect(DelayConnect msg) {
         logger.trace("call handleDelayConnect()");

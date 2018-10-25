@@ -211,6 +211,9 @@ public class CastJobActor extends AbstractActor {
     private void _pushOneTarget(PushTarget t) {
         String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
+        //每此尝试向一个Target推送，都会新建PushEvent
+        //所以要保障不向submitedEvents重复add相同target的event：
+        //所以当一个Target尝试submit失败时，需要将add到submitedEvents中的event移除（handleSubmitPushEventFailed就是干这个的）
         PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
             t.getProduct(),
             t.getToken(),
@@ -224,12 +227,7 @@ public class CastJobActor extends AbstractActor {
         long start = System.currentTimeMillis();
         if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
             _doPush(event,new TargetSucceed(t));
-        } else { //被过滤不符合发送条件的用户只做总量计数， 所以 过滤量=总数-成功数-失败数
-            int all = 1;
-            if (job.getAllCount() != null) {
-                all = job.getAllCount() + 1;
-            }
-            this.job.setAllCount(all);
+        } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);
         }
         long time = System.currentTimeMillis() - start;
@@ -271,8 +269,15 @@ public class CastJobActor extends AbstractActor {
     private void handleTargetSucceed(TargetSucceed msg) {
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
+        //提交成功才做总量计数
+        int all = 1;
+        if (job.getAllCount() != null) {
+            all = job.getAllCount() + 1;
+        }
+        this.job.setAllCount(all);
         targetSucceed(msg.target);
     }
+    //完成一个target的处理（推送或不送）、设置job进度，并开始下个target的处理
     private void targetSucceed(PushTarget t) {
         PushTarget t1 = state.targets.remove(0);
         if (!t.getId().equals(t1.getId())) {
