@@ -474,11 +474,6 @@ public class CastJobActor extends AbstractActor {
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
         }
-        int all = 1;
-        if (job.getAllCount() != null) {
-            all = job.getAllCount() + 1;
-        }
-        this.job.setAllCount(all);
         int succeed = 1;
         if (job.getSucceedCount() != null) {
             succeed = job.getSucceedCount() + 1;
@@ -506,11 +501,6 @@ public class CastJobActor extends AbstractActor {
         if (msg.event.getRetryCount() < MAX_RETRY_PUSH) {
             state.retryEvents.add(msg.event);
         } else {
-            int all = 1;
-            if (job.getAllCount() != null) {
-                all = job.getAllCount() + 1;
-            }
-            this.job.setAllCount(all);
             int failed = job.getFailedCount() + 1;
             this.job.setFailedCount(failed);
         }
