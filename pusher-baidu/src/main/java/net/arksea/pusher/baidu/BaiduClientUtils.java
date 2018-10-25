@@ -10,6 +10,7 @@ import com.baidu.yun.push.exception.PushServerException;
 import com.baidu.yun.push.model.*;
 import net.arksea.pusher.IPushStatusListener;
 import net.arksea.pusher.PushEvent;
+import net.arksea.pusher.PushStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -30,7 +31,7 @@ public class BaiduClientUtils {
 
     public static String push(BaiduPushClient client, PushEvent event, Set<String> passthroughPayload, IPushStatusListener statusListener) {//throws Exception {
         if (event.testEvent) {
-            statusListener.onSucceed(event);
+            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
             return null;
         }
         try {
@@ -50,19 +51,19 @@ public class BaiduClientUtils {
                 .addDeviceType(3);      //设置设备类型，deviceType => 1 for web, 2 for pc, 3 for android, 4 for ios, 5 for wp.
             PushMsgToSingleDeviceResponse response = client.pushMsgToSingleDevice(request);
             log.debug("msgId="+response.getMsgId()+",sendTime="+response.getSendTime());
-            statusListener.onSucceed(event);
+            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
             return response.getMsgId();
         } catch (PushClientException ex) {
-            statusListener.onFailed(-1, ex, event);
+            log.warn("push failed: eventId={},topic={}", event.id, event.topic, ex);
+            statusListener.onComplete(event, PushStatus.PUSH_FAILD);
         } catch (PushServerException ex) {
+            log.warn("push failed: eventId={},topic={},errorCode={}", event.id, event.topic,
+                ex.getErrorCode(),ex);
             int code = ex.getErrorCode();
-            if (code == 30605 || code == 30607 || code == 30608 || code == 30609) {
-                statusListener.onFailed(200, "BadDeviceToken", event); //默认都作为BadDeviceToken处理
+            if (code == 30605 || code == 30607 || code == 30608 || code == 30609) { //默认都作为INVALID_TOKEN处理
+                statusListener.onComplete(event, PushStatus.INVALID_TOKEN);
             } else {
-                String err = "errorCode=" + ex.getErrorCode()
-                           + ", errorMsg=" + ex.getErrorMsg()
-                           + ", requestId=" + ex.getRequestId();
-                statusListener.onFailed(200, new Exception(err,ex), event);
+                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
             }
         } catch (Exception ex) {
             log.error("Unknown Error", ex);
@@ -87,16 +88,8 @@ public class BaiduClientUtils {
             passthroughPayload.add("info");
             push(client, event, passthroughPayload, new IPushStatusListener() {
                 @Override
-                public void onSucceed(PushEvent event) {
-                    log.error("onSucceed");
-                }
-                @Override
-                public void onFailed(int status, Object reason, PushEvent event) {
-                    if (reason instanceof Throwable) {
-                        log.error("onFailed", reason);
-                    } else {
-                        log.error("onFailed: {}", reason);
-                    }
+                public void onComplete(PushEvent event, PushStatus status) {
+                    log.error("onComplete: {}", status);
                 }
             });
             Thread.sleep(20000);
