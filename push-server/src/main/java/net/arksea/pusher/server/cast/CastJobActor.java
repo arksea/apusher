@@ -33,9 +33,9 @@ import java.util.concurrent.TimeUnit;
 public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
-    private static final int JOB_FINISHE_DELAY_SECONDS = 10;
-    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 30;
-    private static final int JOB_START_DELAY_SECONDS = 30;
+    private static final int JOB_FINISHE_DELAY_SECONDS = 5;
+    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 60;
+    private static final int JOB_START_DELAY_SECONDS = 45;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
     private static final int MAX_RETRY_NEXTPAGE = 5;
@@ -223,7 +223,7 @@ public class CastJobActor extends AbstractActor {
     private void _filterUser(PushTarget t, PushEvent event) {
         long start = System.currentTimeMillis();
         if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
-            _doPush(event,new TargetSucceed(t, event));
+            _doPush(event,new TargetSucceed(t));
         } else { //被过滤不符合发送条件的用户只做总量计数， 所以 过滤量=总数-成功数-失败数
             int all = 1;
             if (job.getAllCount() != null) {
@@ -237,6 +237,7 @@ public class CastJobActor extends AbstractActor {
     }
     private void _doPush(PushEvent event, Object succeedMsg) {
         final long start = System.currentTimeMillis();
+        state.submitedEvents.add(event);
         pusher.push(event).onComplete(FutureUtils.completer(
             (ex, result) -> {
                 long time = System.currentTimeMillis() - start;
@@ -244,10 +245,10 @@ public class CastJobActor extends AbstractActor {
                     if (result) {
                         self().tell(succeedMsg, self());
                     } else { //result为false表示提交推送事件失败(PushActor处于不可用状态)
-                        self().tell(new SubmitPushEventFailed(time), ActorRef.noSender());
+                        self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                     }
                 } else { //超时异常表示没有可用PushActor，其他异常表示提交失败
-                    self().tell(new SubmitPushEventFailed(time), ActorRef.noSender());
+                    self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                 }
             }
         ), context().dispatcher());
@@ -259,18 +260,15 @@ public class CastJobActor extends AbstractActor {
      */
     private static class TargetSucceed {
         final PushTarget target;
-        final PushEvent event;
         final long startTime;
 
-        private TargetSucceed(PushTarget target, PushEvent event) {
+        private TargetSucceed(PushTarget target) {
             this.target = target;
-            this.event = event;
             this.startTime = System.currentTimeMillis();
         }
     }
 
     private void handleTargetSucceed(TargetSucceed msg) {
-        state.submitedEvents.add(msg.event);
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
         targetSucceed(msg.target);
@@ -281,7 +279,6 @@ public class CastJobActor extends AbstractActor {
             logger.fatal("assert failed: the removed target is not specified target");
         }
         job.setLastUserId(t1.getUserId());
-        //self().tell(new PushOne(), self()); //此处不能直接调用_pushOne(); 因为会形成递归调用
         _pushOne();
     }
     //------------------------------------------------------------------------------------------------------------------
@@ -310,12 +307,18 @@ public class CastJobActor extends AbstractActor {
      * 提交PushEvent到pusher是因没有pusher处于available而失败
      */
     static class SubmitPushEventFailed {
+        final PushEvent event;
         final long time;
-        SubmitPushEventFailed(long time) {
+        SubmitPushEventFailed(PushEvent event, long time) {
+            this.event = event;
             this.time = time;
         }
     }
     private void handleSubmitPushEventFailed(SubmitPushEventFailed msg) {
+        boolean removed = state.submitedEvents.remove(msg.event);
+        if (!removed) {
+            logger.warn("assert failed: event not in submited list!");
+        }
         long now = System.currentTimeMillis();
         if (submitFailedBeginTime <= 0) {
             submitFailedBeginTime = now;
@@ -371,7 +374,11 @@ public class CastJobActor extends AbstractActor {
             job.setLastPartition(partition);
             //修改partition必须重新设置userId，否则可能会将一个分区的uid设置到另一个分区上，这可能会造成遗漏部分用户
             job.setLastUserId(null);
+            long start = System.currentTimeMillis();
             beans.castJobService.saveCastJobByServer(job);
+            // 计入nextPageDelay，这样可以通过计算得到保存job状态花费的时间：
+            // nextPageDealy - 1024*NEXT_PAGE_DELAY_MILLI
+            state.nextPageDelay += System.currentTimeMillis() - start;
             delayNextPage(false);
         } else {
             _pushOne();
