@@ -31,7 +31,8 @@ public class ApnsPushActor extends AbstractActor {
     private static final int BACKOFF_MIN = 3000;
 
     private static final int PING_DELAY_SECONDS = 5;
-    private int pingFailedCount = 0;
+    private int connectionFailedCount = 0;
+    private IConnectionStatusListener connFailedListener;
     private final State state;
 
     private HTTP2Client apnsClient;
@@ -53,7 +54,8 @@ public class ApnsPushActor extends AbstractActor {
             .match(Connect.class,        this::handleConnect)
             .match(Reconnect.class,   this::handleReconnect)
             .match(ConnectSucceed.class, this::handleConnectSucceed)
-            .match(PingFailed.class, this::handlePingFailed)
+            .match(ConnectionSucceed.class, this::handleConnectionSucceed)
+            .match(ConnectionFailed.class, this::handleConnectionFailed)
             .build();
     }
 
@@ -88,7 +90,12 @@ public class ApnsPushActor extends AbstractActor {
     public void preStart() throws Exception {
         super.preStart();
         logger.debug("ApnsPushActor started: {}", state.pushActorName);
+        connFailedListener = new ConnectionStatusListener(self());
         delayConnect();
+        pingTimer = context().system().scheduler().schedule(
+            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            self(),new Ping(),context().dispatcher(),self());
     }
     private void delayConnect() throws Exception {
         //null判断用于防止多次重复调用reconnect()引起不必要的频繁重连（多次通讯失败的回调可能会集中在一个时间点发生）
@@ -136,7 +143,7 @@ public class ApnsPushActor extends AbstractActor {
     private void handleApnsEvent(PushEvent event) {
         logger.trace("call handleApnsEvent()");
         if (isAvailable()) {
-            ApnsClientUtils.push(session, state.apnsTopic, event, state.pushStatusListener);
+            ApnsClientUtils.push(session, state.apnsTopic, event, connFailedListener, state.pushStatusListener);
             sender().tell(true, self());
         } else {
             sender().tell(false, self());
@@ -228,18 +235,27 @@ public class ApnsPushActor extends AbstractActor {
             ApnsClientUtils.ping(session, new Callback() {
                 public void failed(Throwable ex) {
                     logger.warn("ApnsHtt2Client session ping failed: {}", state.pushActorName, ex);
-                    actor.tell(new PingFailed(), ActorRef.noSender());
+                    actor.tell(new ConnectionFailed(), ActorRef.noSender());
+                }
+                @Override
+                public void succeeded() {
+                    actor.tell(new ConnectionSucceed(), ActorRef.noSender());
                 }
             });
         }
     }
 
-    private static class PingFailed {}
-    private void handlePingFailed(PingFailed msg) throws Exception {
-        if (++pingFailedCount >= 3) {
-            pingFailedCount = 0;
+    static class ConnectionFailed {}
+    private void handleConnectionFailed(ConnectionFailed msg) throws Exception {
+        if (++connectionFailedCount >= 3) {
+            connectionFailedCount = 0;
             delayConnect();
         }
+    }
+
+    static class ConnectionSucceed {}
+    private void handleConnectionSucceed(ConnectionSucceed msg) throws Exception {
+        connectionFailedCount = 0;
     }
     //------------------------------------------------------------------------------------
     private static class ConnectSucceed {
@@ -252,10 +268,6 @@ public class ApnsPushActor extends AbstractActor {
         this.session = msg.session;
         //重置连接的退避时间
         state.connectDelay = BACKOFF_MIN;
-        pingTimer = context().system().scheduler().schedule(
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
-            self(),new Ping(),context().dispatcher(),self());
     }
 
     static class ClientLifeCycleListener implements LifeCycle.Listener {
