@@ -19,8 +19,8 @@ public class CastJobManagerState {
     Map<String, CastJobManager.ProductInfo> productInfoMap = new HashMap<>();
     @Value("${push.castJobManager.maxJobsPerProduct}")
     int maxJobsPerProduct;
-    @Value("${push.castJobManager.pusherFactoryClass}")
-    String pusherClass;
+    @Value("${push.castJobManager.pushClientFactoryClass}")
+    String pushClientFactoryClass;
     @Autowired
     public CastJobService castJobService;
     @Autowired

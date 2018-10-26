@@ -1,4 +1,4 @@
-package net.arksea.pusher.apns;
+package net.arksea.pusher;
 
 /**
  *
@@ -7,4 +7,6 @@ package net.arksea.pusher.apns;
 public interface IConnectionStatusListener {
     void onSucceed();
     void onFailed();
+    void reconnect();
+    void connected(Object session);
 }
