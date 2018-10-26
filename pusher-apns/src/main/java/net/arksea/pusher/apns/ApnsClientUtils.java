@@ -60,11 +60,9 @@ public class ApnsClientUtils {
     public static void connect(String apnsServerIP, HTTP2Client client, final KeyManagerFactory keyManagerFactory, Session.Listener sessionListener, Promise<Session> promise)  {
         final SslContextFactory sslContextFactory = new SslContextFactory(true);
         try {
-            //init TrustManager
             final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance("SunX509");
             trustManagerFactory.init((KeyStore) null);
             TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
-            //init SSLContext
             final SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
             sslContext.init(keyManagerFactory.getKeyManagers(), trustManagers, null);
             sslContextFactory.setSslContext(sslContext);
@@ -76,14 +74,6 @@ public class ApnsClientUtils {
         client.connect(sslContextFactory, new InetSocketAddress(apnsServerIP, APNS_PORT), sessionListener, promise);
     }
 
-    public static void stop(HTTP2Client client) {
-        try {
-            client.stop();
-        } catch (Exception ex) {
-            log.debug("close Http2Client failed", ex);
-        }
-    }
-
     public static void ping(Session session, Callback callback) {
         session.ping(new PingFrame(System.currentTimeMillis(), false), callback);
     }
@@ -92,7 +82,18 @@ public class ApnsClientUtils {
         return session.getStreams().size() < MAX_STREAM_SIZE;
     }
 
-    public static void push(Session session, String apnsTopic, PushEvent event, IPushStatusListener statusListener) {//throws Exception {
+    /**
+     * 设计 connectionFailedListener.onFailed 的目的是为了防止ping检测到连接失败前，
+     * 已经发送失败大量的消息
+     * @param session
+     * @param apnsTopic
+     * @param event
+     * @param connectionFailedListener
+     * @param statusListener
+     */
+    public static void push(Session session, String apnsTopic, PushEvent event,
+                            IConnectionStatusListener connectionFailedListener,
+                            IPushStatusListener statusListener) {//throws Exception {
         if (event.testEvent) {
             statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
             return;
@@ -120,6 +121,7 @@ public class ApnsClientUtils {
                     public void failed(Throwable ex) {//没有及时调用ping会造成此处EofException
                         log.debug("stream.data Callback.failed");
                         statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                        connectionFailedListener.onFailed();
                     }
                 });
             }
@@ -128,6 +130,7 @@ public class ApnsClientUtils {
             public void failed(Throwable ex) {
                 log.debug("stream.newStream failed", ex);
                 statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                connectionFailedListener.onFailed();
             }
         }, responseListener);
     }
