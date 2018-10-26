@@ -54,7 +54,7 @@ public class UserDailyTimerTargetSource implements ITargetSource {
     public int getPusherCount(CastJob job) {
         int minuteOfDay = Integer.parseInt(job.getCastTarget());
         long timerCount = service.getTimerCount(job.getProduct(), minuteOfDay, job.getPayloadType());
-        int count =  (int)(timerCount / 10000) + 1;
+        int count =  (int)(timerCount / pusherCountConst()) + 1;
         return Math.min(count, maxPusherCount);
     }
 }

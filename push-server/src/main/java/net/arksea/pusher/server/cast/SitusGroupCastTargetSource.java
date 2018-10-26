@@ -20,10 +20,12 @@ class SitusGroupCastTargetSource implements ITargetSource {
     private final static Logger logger = LogManager.getLogger(SitusGroupCastTargetSource.class);
     private final List<String> situsGroups;
     private final PushTargetService pushTargetService;
+    private final int maxPusherCount;
 
-    public SitusGroupCastTargetSource(PushTargetService pushTargetService, List<String> situsGroups) {
+    public SitusGroupCastTargetSource(PushTargetService pushTargetService, List<String> situsGroups, int maxPusherCount) {
         this.pushTargetService = pushTargetService;
         this.situsGroups = situsGroups;
+        this.maxPusherCount = maxPusherCount;
     }
 
     @Override
@@ -40,6 +42,8 @@ class SitusGroupCastTargetSource implements ITargetSource {
     }
 
     public int getPusherCount(CastJob job) {
-        return 5;
+        long targetCount = pushTargetService.countByPartitionAndProduct(0, job.getProduct());
+        int count =  (int)(targetCount * Partition.MAX_USER_PARTITION / pusherCountConst()) + 1;
+        return Math.min(count, maxPusherCount);
     }
 }

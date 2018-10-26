@@ -59,4 +59,10 @@ public interface PushTargetDao extends CrudRepository<PushTarget, Long> {
 
     //@Query("select p.userInfo from PushTarget p where c.product = ?1 and c.userId = ?2")
     List<String> getUserInfoByProductAndUserId(String product, String userId);
+
+    @Query("select count(1) from PushTarget c where c.partitions = ?1 and c.product = ?2")
+    long countByPartitionAndProduct(int partitions, String product);
+
+    @Query("select count(1) from PushTarget c where c.situs = ?1 and c.product = ?2")
+    long countBySitusAndProduct(String situs, String product);
 }

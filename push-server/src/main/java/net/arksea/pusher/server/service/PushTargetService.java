@@ -29,7 +29,7 @@ public class PushTargetService {
     //因此这里的设置的值(例如1天)必须小于（最好远小于）删除记录的过期时间（例如60天）
     private final static long MIN_UPDATE_PERIOD = 3600_000 * 24 * 1;
     @Autowired
-    PushTargetDao pushTargetDao;
+    private PushTargetDao pushTargetDao;
 
     @Value("${push.pushTarget.queryPageSize}")
     int queryPageSize;
@@ -43,6 +43,14 @@ public class PushTargetService {
     private PushTarget savePushTarget(PushTarget pt) {
         pushTargetCacheService.markDirty(new PushTargetCacheFactory.PushTargetKey(pt.getProduct(), pt.getUserId()));
         return pushTargetDao.save(pt);
+    }
+
+    public long countByPartitionAndProduct(int partitions, String product) {
+        return pushTargetDao.countByPartitionAndProduct(partitions, product);
+    }
+
+    public long countBySitusAndProduct(String situs, String product) {
+        return pushTargetDao.countBySitusAndProduct(situs, product);
     }
 
     public PushTarget updateToken(final String product, final String userId, final String userInfo, final String token, final boolean tokenActived) {

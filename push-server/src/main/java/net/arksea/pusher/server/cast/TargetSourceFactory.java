@@ -1,6 +1,7 @@
 package net.arksea.pusher.server.cast;
 
 import net.arksea.pusher.entity.CastJob;
+import net.arksea.pusher.server.repository.PushTargetDao;
 import net.arksea.pusher.server.service.DailyCastService;
 import net.arksea.pusher.server.service.PushTargetService;
 import net.arksea.pusher.server.service.UserDailyTimerService;
@@ -27,6 +28,8 @@ public class TargetSourceFactory {
     @Autowired
     UserDailyTimerService userDailyTimerService;
     @Autowired
+    PushTargetDao pushTargetDao;
+    @Autowired
     DailyCastService dailyCastService;
     @Value("${push.pushTarget.maxPusherCount}")
     int maxPusherCount;
@@ -39,7 +42,7 @@ public class TargetSourceFactory {
     void init() {
         userDailyTimerTargetSource = new UserDailyTimerTargetSource(userDailyTimerService,maxPusherCount);
         partitionalTargetSource = new PartitionalTargetSource(pushTargetService,maxPusherCount);
-        dailyCastTargetSource = new DailyCastTargetSource(dailyCastService,maxPusherCount);
+        dailyCastTargetSource = new DailyCastTargetSource(dailyCastService,pushTargetDao,maxPusherCount);
     }
 
     public ITargetSource createTargetSource(CastJob job) {
@@ -55,7 +58,7 @@ public class TargetSourceFactory {
                 return new SpecifiedTargetSource(pushTargetService, userList);
             case SITUS:
                 String situs = job.getCastTarget();
-                return new SitusCastTargetSource(pushTargetService, situs);
+                return new SitusCastTargetSource(pushTargetService, situs, maxPusherCount);
             case SITUSGROUP:
                 List<String> situsGroups = new LinkedList<>();
                 String[] strs2 = StringUtils.split(job.getCastTarget(),",");
@@ -63,7 +66,7 @@ public class TargetSourceFactory {
                     throw new IllegalArgumentException("SitusGroupCat Job's group list can not be empty");
                 }
                 situsGroups.addAll(Arrays.asList(strs2));
-                return new SitusGroupCastTargetSource(pushTargetService, situsGroups);
+                return new SitusGroupCastTargetSource(pushTargetService, situsGroups, maxPusherCount);
             case BROAD:
                 return partitionalTargetSource;
             case USER_DAILY_TIMER:

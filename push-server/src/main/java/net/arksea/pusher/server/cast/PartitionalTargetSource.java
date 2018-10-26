@@ -19,10 +19,10 @@ import java.util.Map;
 
 public class PartitionalTargetSource implements ITargetSource {
     private final static Logger logger = LogManager.getLogger(PartitionalTargetSource.class);
-    private final PushTargetService pushDataService;
+    private final PushTargetService pushTargetService;
     private final int maxPusherCount;
-    public PartitionalTargetSource(PushTargetService pushDataService,int maxPusherCount) {
-        this.pushDataService = pushDataService;
+    public PartitionalTargetSource(PushTargetService pushTargetService, int maxPusherCount) {
+        this.pushTargetService = pushTargetService;
         this.maxPusherCount = maxPusherCount;
     }
     @Override
@@ -30,7 +30,7 @@ public class PartitionalTargetSource implements ITargetSource {
         int partition = job.getLastPartition();
         if (partition < Partition.MAX_USER_PARTITION) {
             String product = job.getProduct();
-            List<PushTarget> targets = pushDataService.findPartitionTop(partition, product, job.getLastUserId());
+            List<PushTarget> targets = pushTargetService.findPartitionTop(partition, product, job.getLastUserId());
             logger.trace("call nextPage(job={}),return {} cout PushTarget in partition {}",job.getId(), targets.size(), partition);
             return Futures.successful(targets);
         } else {
@@ -40,6 +40,8 @@ public class PartitionalTargetSource implements ITargetSource {
     }
 
     public int getPusherCount(CastJob job) {
-        return maxPusherCount;
+        long targetCount = pushTargetService.countByPartitionAndProduct(0, job.getProduct());
+        int count =  (int)(targetCount * Partition.MAX_USER_PARTITION / pusherCountConst()) + 1;
+        return Math.min(count, maxPusherCount);
     }
 }

@@ -2,6 +2,8 @@ package net.arksea.pusher.server.cast;
 
 import net.arksea.pusher.entity.PushTarget;
 import groovy.json.JsonSlurper;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.util.StringUtils;
 
 import javax.script.*;
@@ -11,6 +13,7 @@ import javax.script.*;
  * Created by xiaohaixing on 2017/11/21.
  */
 public class UserFilter implements IUserFilter {
+    private Logger logger = LogManager.getLogger(UserFilter.class);
     private final JsonSlurper jsonSlurper = new JsonSlurper();
     private final ScriptEngine scriptEngine;
     private final CompiledScript script;
@@ -23,26 +26,31 @@ public class UserFilter implements IUserFilter {
             final ScriptEngineManager scriptEngineManager = new ScriptEngineManager();
             this.scriptEngine = scriptEngineManager.getEngineByName("groovy");
             Compilable compilingEngine = (Compilable)this.scriptEngine;
-            this.script = compilingEngine.compile(script);
+            this.script = compilingEngine.compile(script); //todo: 缓存已编译脚本
         }
     }
 
     @Override
-    public boolean doFilter(PushTarget pushTarget) throws ScriptException {
-        if (script == null) {
-            return true;
-        } else if (StringUtils.isEmpty(pushTarget.getToken()) || !pushTarget.isTokenActived()) {
-            return false;
-        } else {
-            Bindings binding = new SimpleBindings();
-            Object userInfoObj = null;
-            if (!StringUtils.isEmpty(pushTarget.getUserInfo())) {
-                userInfoObj = jsonSlurper.parseText(pushTarget.getUserInfo());
+    public boolean doFilter(PushTarget pushTarget) {
+        try {
+            if (script == null) {
+                return true;
+            } else if (StringUtils.isEmpty(pushTarget.getToken()) || !pushTarget.isTokenActived()) {
+                return false;
+            } else {
+                Bindings binding = new SimpleBindings();
+                Object userInfoObj = null;
+                if (!StringUtils.isEmpty(pushTarget.getUserInfo())) {
+                    userInfoObj = jsonSlurper.parseText(pushTarget.getUserInfo());
+                }
+                binding.put("info", userInfoObj);
+                binding.put("target", pushTarget);
+                binding.put("filter", this);
+                return (boolean) this.script.eval(binding);
             }
-            binding.put("info", userInfoObj);
-            binding.put("target", pushTarget);
-            binding.put("filter", this);
-            return (boolean) this.script.eval(binding);
+        } catch (Exception ex) {
+            logger.error("do filter failed", ex);
+            return false;
         }
     }
 
