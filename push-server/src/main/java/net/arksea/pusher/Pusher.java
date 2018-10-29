@@ -25,7 +25,7 @@ public class Pusher implements IPusher {
     private static final Logger logger = LogManager.getLogger(Pusher.class);
     private final List<ActorRef> pusherList;
     private final List<ActorRef> pusherPoolList;
-    private final int timeout = 100;
+    private final int timeout = 1000;
     private final int askAvailableTimeout = 100;
     private final ActorRefFactory actorRefFactory;
     private final Random random = new Random(System.currentTimeMillis());
