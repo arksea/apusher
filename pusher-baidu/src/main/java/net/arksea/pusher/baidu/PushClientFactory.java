@@ -1,9 +1,7 @@
 package net.arksea.pusher.baidu;
 
-import akka.actor.ActorRefFactory;
-import net.arksea.pusher.IPushStatusListener;
-import net.arksea.pusher.IPusher;
-import net.arksea.pusher.IPusherFactory;
+import net.arksea.pusher.IPushClient;
+import net.arksea.pusher.IPushClientFactory;
 import org.apache.commons.lang.StringUtils;
 
 import java.io.FileInputStream;
@@ -13,13 +11,11 @@ import java.util.Set;
 
 /**
  *
- * Created by xiaohaixing on 2018/9/20.
+ * Created by xiaohaixing on 2018/10/26.
  */
-public class PusherFactory implements IPusherFactory {
+public class PushClientFactory implements IPushClientFactory {
     @Override
-    public IPusher create(String productId, String pusherName,
-                          int clientCount, ActorRefFactory actorRefFactory,
-                          IPushStatusListener pushStatusListener) throws Exception {
+    public IPushClient create(String name, String productId) throws Exception {
         Properties prop = new Properties();
         prop.load(new FileInputStream("./config/pusher-baidu.properties"));
         String apiKey = prop.getProperty("product."+productId+".apiKey");
@@ -32,6 +28,6 @@ public class PusherFactory implements IPusherFactory {
                 passthroughPayload.add(t);
             }
         }
-        return new BaiduPusher(pusherName, clientCount, actorRefFactory,apiKey, secretKey, passthroughPayload, pushStatusListener);
+        return new PushClient(apiKey, secretKey, passthroughPayload);
     }
 }
