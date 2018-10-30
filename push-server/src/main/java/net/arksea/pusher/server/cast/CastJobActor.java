@@ -7,10 +7,7 @@ import akka.dispatch.OnComplete;
 import akka.japi.Creator;
 import groovy.json.JsonSlurper;
 import net.arksea.base.FutureUtils;
-import net.arksea.pusher.IPushStatusListener;
-import net.arksea.pusher.IPusher;
-import net.arksea.pusher.IPusherFactory;
-import net.arksea.pusher.PushEvent;
+import net.arksea.pusher.*;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.server.Partition;
@@ -46,7 +43,7 @@ public class CastJobActor extends AbstractActor {
     private final UserFilter userFilter;
     private Set<String> testTargets = null;
     private final ITargetSource targetSource;
-    private IPusherFactory pusherFactory;
+    private IPushClientFactory pushClientFactory;
     private IPusher pusher;
 
     private long submitFailedBeginTime;
@@ -60,7 +57,7 @@ public class CastJobActor extends AbstractActor {
     private int noReplyEventCount; //首次进入任务结束流程时，未收到回复的推送事件数
 
     private CastJobActor(State state, JobResources beans, CastJob job, ITargetSource targetSource,
-                         UserFilter userFilter, IPusherFactory pusherFactory) {
+                         UserFilter userFilter, IPushClientFactory pushClientFactory) {
         this.state = state;
         this.beans = beans;
         this.job = job;
@@ -74,7 +71,7 @@ public class CastJobActor extends AbstractActor {
         }
         this.userFilter = userFilter;
         this.targetSource = targetSource;
-        this.pusherFactory = pusherFactory;
+        this.pushClientFactory = pushClientFactory;
         this.tokenStatusListener = new PushStatusListener(self(), beans);
         this.pusherCount = targetSource.getPusherCount(job);
     }
@@ -114,7 +111,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
 
-    static Props props(JobResources beans, CastJob job, ITargetSource targetSource, IPusherFactory pusherFactory) throws Exception {
+    static Props props(JobResources beans, CastJob job, ITargetSource targetSource, IPushClientFactory pushClientFactory) throws Exception {
         String script = "";
         if (!StringUtils.isEmpty(job.getUserFilter())) {
             Map map =  (Map)jsonSlurper.parseText(job.getUserFilter());
@@ -125,7 +122,7 @@ public class CastJobActor extends AbstractActor {
         return Props.create(CastJobActor.class, new Creator<CastJobActor>() {
             @Override
             public CastJobActor create() throws Exception {
-                return new CastJobActor(state, beans, job, targetSource, userFilter, pusherFactory);
+                return new CastJobActor(state, beans, job, targetSource, userFilter, pushClientFactory);
             }
         });
     }
@@ -184,8 +181,9 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handleCastJobStartDelay(CastJobStartDelay msg) throws Exception {
+        logger.trace("call handleCastJobStartDelay()");
         String pusherName = "castjob-"+job.getId()+"-pusher";
-        this.pusher = pusherFactory.create(job.getProduct(), pusherName, pusherCount, context(), tokenStatusListener);
+        this.pusher = new Pusher(pusherName, pusherCount, job.getProduct(), pushClientFactory,tokenStatusListener,context());
         //延时3秒，防止PushActor刚刚建立连接，不在Avaliable状态
         scheduleOnce(3, TimeUnit.SECONDS, new PushOne());
     }
@@ -267,6 +265,7 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handleTargetSucceed(TargetSucceed msg) {
+        logger.trace("handleTargetSucceed");
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
         //提交成功才做总量计数
@@ -320,6 +319,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handleSubmitPushEventFailed(SubmitPushEventFailed msg) {
+        logger.trace("call handleSubmitPushEventFailed(msg)");
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
@@ -372,6 +372,7 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handlePageTargets(PageTargets msg) {
+        logger.trace("handlePageTargets");
         state.targets = msg.targets;
         state.retryNextPageCount = 0;
         if (state.targets == null || state.targets.isEmpty()) {
@@ -424,6 +425,7 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handleJobFinished(JobFinished msg) {
+        logger.trace("handleJobFinished");
         if (jobStopDelaySeconds == 0) {
             noReplyEventCount = state.submitedEvents.size();
         }
