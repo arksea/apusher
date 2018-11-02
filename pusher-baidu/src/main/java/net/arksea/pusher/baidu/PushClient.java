@@ -19,7 +19,7 @@ import java.util.Set;
 public class PushClient implements IPushClient {
     private final static Logger logger = LogManager.getLogger(PushClient.class);
 
-    private BaiduPushClient apnsClient;
+    private BaiduPushClient baiduClient;
     final private String apiKey;
     final private String secretKey;
     final private Set<String> passthroughPayload;
@@ -33,7 +33,7 @@ public class PushClient implements IPushClient {
     @Override
     public void connect(IConnectionStatusListener listener) throws Exception {
         PushKeyPair pair = new PushKeyPair(apiKey,secretKey);
-        apnsClient = new BaiduPushClient(pair, BaiduPushConstants.CHANNEL_REST_URL);
+        baiduClient = new BaiduPushClient(pair, BaiduPushConstants.CHANNEL_REST_URL);
         listener.connected("connected");
         listener.onSucceed();
     }
@@ -54,12 +54,12 @@ public class PushClient implements IPushClient {
                 pushType = 0; //以透传方式推送
             }
             request
-                .addChannelId(event.token)
+                .addChannelId(event.tokens[0])
                 .addMsgExpires(expiresSeconds)  //设置消息的有效时间,单位秒,默认3600*5.
                 .addMessageType(pushType) //设置消息类型,0表示透传消息,1表示通知,默认为0.
                 .addMessage(event.payload)
                 .addDeviceType(3);      //设置设备类型，deviceType => 1 for web, 2 for pc, 3 for android, 4 for ios, 5 for wp.
-            PushMsgToSingleDeviceResponse response = apnsClient.pushMsgToSingleDevice(request);
+            PushMsgToSingleDeviceResponse response = baiduClient.pushMsgToSingleDevice(request);
             logger.debug("msgId="+response.getMsgId()+",sendTime="+response.getSendTime());
             statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
         } catch (PushClientException ex) {
@@ -88,11 +88,11 @@ public class PushClient implements IPushClient {
 
     @Override
     public boolean isAvailable(Object session) {
-        return apnsClient != null;
+        return baiduClient != null;
     }
 
     @Override
     public void close(Object session) {
-        apnsClient = null;
+        baiduClient = null;
     }
 }

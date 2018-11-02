@@ -37,7 +37,7 @@ public class PushClient implements IPushClient<Session> {
     private static final int MAX_STREAM_SIZE = 495;
     public static final String APNS_HOST = "api.push.apple.com";
     private static final int APNS_PORT = 443;
-    //private static final int APNS_PORT = 2197;
+    private static final int APNS_DEV_PORT = 2197;
     private static final String URI_BASE = "https://" + APNS_HOST + ":" + APNS_PORT + "/3/device/";
 
     final private String name;
@@ -137,13 +137,13 @@ public class PushClient implements IPushClient<Session> {
         requestFields.put("apns-priority", "10");
         requestFields.put("apns-topic", apnsTopic);
 
-        MetaData.Request request = new MetaData.Request("POST", new HttpURI(URI_BASE + event.token), HttpVersion.HTTP_2, requestFields);
+        MetaData.Request request = new MetaData.Request("POST", new HttpURI(URI_BASE + event.tokens[0]), HttpVersion.HTTP_2, requestFields);
         HeadersFrame headersFrame = new HeadersFrame(request, null, false);
         Stream.Listener responseListener = new ResponseListener(event,statusListener);
         session.newStream(headersFrame, new Promise<Stream>() {
             @Override
             public void succeeded(Stream stream) {
-                logger.trace("push one: eventId={}, topic={},token={},payload={}", event.id, event.topic,event.token, event.payload);
+                logger.trace("push one: eventId={}, topic={},token={},payload={}", event.id, event.topic,event.tokens[0], event.payload);
                 ByteBuffer content = ByteBuffer.wrap(event.payload.getBytes(Charset.forName("UTF-8")));
                 DataFrame requestContent = new DataFrame(stream.getId(), content, true);
                 stream.data(requestContent, new Callback() {

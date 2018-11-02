@@ -64,20 +64,19 @@ public class DailyCastService {
         return n >= 1;
     }
 
-    public void addCastJob(ZonedDateTime startOfToday, DailyCast cast) {
-        CastJob job = makeCastJob(startOfToday, cast);
+    public void addCastJob(ZonedDateTime startOfToday, DailyCast cast, boolean batchDailyCast) {
+        CastJob job = makeCastJob(startOfToday, cast, batchDailyCast);
         castJobService.addCastJob(job);
         cast.setLastCreated(new Timestamp(startOfToday.toEpochSecond()*1000));
         dailyCastDao.save(cast);
     }
 
-
-    private CastJob makeCastJob(ZonedDateTime startOfToday, DailyCast cast) {
+    private CastJob makeCastJob(ZonedDateTime startOfToday, DailyCast cast, boolean batchDailyCast) {
         CastJob job = new CastJob();
         job.setDescription(cast.getDescription());
         job.setProduct(cast.getProduct());
         job.setCastTarget(cast.getId().toString());
-        job.setCastType(CastType.USER_DAILY);
+        job.setCastType(batchDailyCast ? CastType.BATCH_DAILY : CastType.USER_DAILY);
         job.setTestTarget(cast.getTestTarget());
         job.setEnabled(true);
         job.setUserFilter(cast.getUserFilter());

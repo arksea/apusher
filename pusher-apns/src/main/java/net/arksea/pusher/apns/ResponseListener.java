@@ -69,13 +69,13 @@ public class ResponseListener extends Stream.Listener.Adapter {
         String msg = "status="+status+";body="+body;
         if (status.get() == 200) {
             //status==200时不会有onData，目前未观察到例外
-            log.warn("onData when succeed: {};eventId={}, topic={},token={}", msg,event.id, event.topic,event.token);
+            log.warn("onData when succeed: {};eventId={}, topic={},token={}", msg,event.id, event.topic,event.tokens[0]);
             callback.succeeded();
         } else {
             try {
                 Map ret = objectMapper.readValue(body, Map.class);
                 String reason = (String)ret.get("reason");
-                log.trace("apns push failed: {};eventId={},topic={},token={}",msg,event.id,event.topic,event.token);
+                log.trace("apns push failed: {};eventId={},topic={},token={}",msg,event.id,event.topic,event.tokens[0]);
                 onFailed(status.get(), reason, event);
             } catch (IOException ex) {
                 log.error("parse apns resule failed: "+body, ex);
@@ -112,7 +112,7 @@ public class ResponseListener extends Stream.Listener.Adapter {
                         //这些状态表明是用户状态异常造成的推送失败，不做推送成功与失败计数
                         //并将tokenActive设置成false，下次不再向他推送
                         statusListener.onComplete(event, PushStatus.INVALID_TOKEN);
-                        log.debug("apns push failed: status={},reason={},eventId={},topic={},token={}", status, reason, event.id, event.topic,event.token);
+                        log.debug("apns push failed: status={},reason={},eventId={},topic={},token={}", status, reason, event.id, event.topic,event.tokens[0]);
                         break;
                     case "InternalServerError":
                     case "ServiceUnavailable":

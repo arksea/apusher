@@ -5,13 +5,19 @@ description = """推送服务"""
 
 dependencies {
     compile project (':pusher-apns')
-    compile project (':pusher-baidu')
+//    compile project (':pusher-baidu')
     compile project (':push-client')
     compile 'net.arksea:acache:0.8.0-SNAPSHOT'
     compile ("net.arksea:aregister-client:0.4-SNAPSHOT")
     compile 'net.arksea:httpclient-asker:1.0.3-SNAPSHOT'
     compile 'redis.clients:jedis:2.8.1'
     compile 'org.codehaus.groovy:groovy-all:2.4.4'
+
+    compile 'com.typesafe.akka:akka-actor_2.12:2.5.11'
+    compile 'com.typesafe.akka:akka-remote_2.12:2.5.11'
+    compile 'com.typesafe.akka:akka-cluster_2.12:2.5.11'
+    compile 'com.typesafe.akka:akka-slf4j_2.12:2.5.11'
+    compile 'org.scala-lang:scala-library:2.12.4'
 
     compile 'org.springframework:spring-core:4.3.9.RELEASE'
     compile 'org.springframework:spring-context:4.3.9.RELEASE'
@@ -21,6 +27,15 @@ dependencies {
 
     compile 'com.fasterxml.jackson.core:jackson-databind:2.4.0'
     compile 'com.fasterxml.jackson.module:jackson-module-jaxb-annotations:2.4.0'
+
+    //Log4j 1.x Bridge to Log4j 2.x
+    compile 'org.apache.logging.log4j:log4j-1.2-api:2.5'
+    //Apache Commons Logging Bridge to Log4j 2.x
+    compile 'org.apache.logging.log4j:log4j-jcl:2.5'
+    //slf4j Bridge to Log4j 2.x
+    compile 'org.apache.logging.log4j:log4j-slf4j-impl:2.5'
+    //Java Util Logging Bridge to Log4j 2.x
+    compile 'org.apache.logging.log4j:log4j-jul:2.5'
 
     testCompile 'org.springframework:spring-test:4.2.2.RELEASE'
 
