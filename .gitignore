@@ -20,3 +20,8 @@
 /pusher-baidu/build
 /push-client/build
 /push-client/tools/lib
+/push-test-tools/build
+/push-test-tools/publish/jre
+/push-test-tools/publish/lib
+/push-test-tools/publish/*.jar
+/pusher-huawei/build

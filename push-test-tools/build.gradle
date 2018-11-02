@@ -1,0 +1,49 @@
+apply plugin: 'base'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+description = """push test tool"""
+
+dependencies {
+    compile project (':pusher-huawei')
+    compile project (':pusher-apns')
+}
+
+//IDE中运行与调试的配置
+def runMainClass = 'net.arksea.pusher.tools.TestToolMain'
+//这个版本适配JDK1.8.0_121~152
+//详细匹配映射表请参考 http://www.eclipse.org/jetty/documentation/current/alpn-chapter.html
+def runJvmArgs = ['-Xbootclasspath/p:/alpn-boot-8.1.11.v20170118.jar']
+//配置在IDE中运行及调试时的参数
+task run(type: JavaExec, dependsOn: 'classes') {
+    classpath = sourceSets.test.runtimeClasspath + sourceSets.main.runtimeClasspath
+    main = runMainClass
+    standardInput = System.in
+    jvmArgs = runJvmArgs
+}
+
+jar {
+    manifest {
+        attributes 'Main-Class': runMainClass
+        attributes "Class-Path": configurations.runtime.collect { 'lib/'+it.getName() }.join(' ')+" config/"
+    }
+}
+
+//拷贝部署文件到指定目录
+task publish <<{
+    //拷贝前先删除部署目录
+    delete('publish/lib')
+    copy{ //拷贝本项目打包的jar文件
+        from 'build/libs/'
+        into 'publish'
+    }
+    copy{ //拷贝依赖库
+        from 'config'
+        into 'publish/config'
+    }
+    copy{ //拷贝依赖库
+        from configurations.runtime
+        into 'publish/lib'
+    }
+}
+publish.dependsOn(build)
