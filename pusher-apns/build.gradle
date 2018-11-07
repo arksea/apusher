@@ -14,8 +14,8 @@ dependencies {
     //适配JDK1.8.0_66
     compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.6.v20151105'
     //适配JDK1.8.0_121~152
-    compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.6.v20170118'
+    //compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.6.v20170118'
     //适配JDK1.8.0_161~181
-    compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.12.v20180117'
+    //compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.12.v20180117'
     compile 'com.fasterxml.jackson.core:jackson-databind:2.4.0'
 }

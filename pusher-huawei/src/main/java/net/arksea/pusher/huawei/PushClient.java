@@ -2,6 +2,8 @@ package net.arksea.pusher.huawei;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.arksea.pusher.*;
+import org.apache.http.Header;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -72,7 +74,7 @@ public class PushClient implements IPushClient<String> {
                 accessTokenExpiresTime = System.currentTimeMillis() + expiresIn * 1000;
                 listener.connected(this.accessToken);
             } else {
-                logger.warn("Get huawei access token failed: {}", body);
+                logger.warn("Get huawei access token failed: code={}, result={}", code, body);
                 close(accessToken);
                 listener.reconnect();
             }
@@ -109,21 +111,39 @@ public class PushClient implements IPushClient<String> {
             StringBuilder tokensBuff = new StringBuilder();
             tokensBuff.append("[");
             for (String t : event.tokens) {
+                tokensBuff.append("\"");
                 tokensBuff.append(t);
-                tokensBuff.append(",");
+                tokensBuff.append("\",");
             }
             tokensBuff.setCharAt(tokensBuff.length() - 1, ']');
             List<NameValuePair> params = new ArrayList<>();
-            params.add(new BasicNameValuePair("access_token", this.accessToken));
-            params.add(new BasicNameValuePair("nsp_svc", "openpush.message.api.send"));
-            params.add(new BasicNameValuePair("nsp_ts", Long.toString(System.currentTimeMillis()/1000)));
-            params.add(new BasicNameValuePair("device_token_list", tokensBuff.toString()));
-            params.add(new BasicNameValuePair("payload", event.payload));
-            params.add(new BasicNameValuePair("expire_time", expireTime));
-            post.setEntity(new UrlEncodedFormEntity(params));
+            NameValuePair p1 = new BasicNameValuePair("access_token", this.accessToken);
+            logger.debug(p1.toString());
+            params.add(p1);
+            NameValuePair p2 = new BasicNameValuePair("nsp_svc", "openpush.message.api.send");
+            logger.debug(p2.toString());
+            params.add(p2);
+            NameValuePair p3 = new BasicNameValuePair("nsp_ts", String.valueOf(System.currentTimeMillis() / 1000));
+            logger.debug(p3.toString());
+            params.add(p3);
+            NameValuePair p4 = new BasicNameValuePair("device_token_list", tokensBuff.toString());
+            logger.debug(p4.toString());
+            params.add(p4);
+            NameValuePair p5 = new BasicNameValuePair("payload", event.payload);
+            logger.debug(p5.toString());
+            params.add(p5);
+            NameValuePair p6 = new BasicNameValuePair("expire_time", expireTime);
+            logger.debug(p6.toString());
+            params.add(p6);
+            HttpEntity entity = new UrlEncodedFormEntity(params);
+            post.setEntity(entity);
             CloseableHttpResponse response = httpclient.execute(post);
             int code = response.getStatusLine().getStatusCode();
-            String nspStatus = response.getFirstHeader("NSP_STATUS").getValue();
+            String nspStatus = null;
+            Header h = response.getFirstHeader("NSP_STATUS");
+            if (h != null) {
+                nspStatus = h.getValue();
+            }
             if (code == 503) { //系统级失败：流控
                 logger.warn("华为推送流控错误");
                 statusListener.onComplete(event, PushStatus.PUSH_FAILD);
@@ -142,6 +162,7 @@ public class PushClient implements IPushClient<String> {
                 if ("80000000".equals(scode)) { //成功
                     statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
                 } else { //应用级失败
+                    logger.warn("华为推送错误, body={}", body);
                     statusListener.onComplete(event, PushStatus.PUSH_FAILD);
                 }
             }
@@ -177,34 +198,4 @@ public class PushClient implements IPushClient<String> {
         }
         httpclient = null;
     }
-
-    public static void main(String[] args) {
-        try {
-            PushClient client = new PushClient("1091311", "a6g5b9xt14vr2uhv41d7ku8b5ml8z0a4");
-            IConnectionStatusListener connListener = new IConnectionStatusListener() {
-                @Override
-                public void onSucceed() {
-                    logger.info("onSucceed");
-                }
-                @Override
-                public void onFailed() {
-                    logger.info("onFailed");
-                }
-                @Override
-                public void reconnect() {
-                    logger.info("reconnect");
-                }
-                @Override
-                public void connected(Object token) {
-                    logger.info("connected, huawei access token: {}", token);
-                }
-            };
-            client.connect(connListener);
-            Thread.sleep(5000);
-            client.close("");
-        } catch (Exception ex) {
-            logger.error(ex);
-        }
-    }
-
 }

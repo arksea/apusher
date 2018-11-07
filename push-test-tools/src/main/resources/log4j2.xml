@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="WARN" monitorInterval="180">
     <Appenders>
-        <RollingRandomAccessFile name="file" fileName="logs/server.log" filePattern="logs/backup/server-%d{yyyy-MM-dd}-%i.log.gz">
+        <RollingRandomAccessFile name="file" fileName="logs/pushtool.log" filePattern="logs/backup/pushtool-%d{yyyy-MM-dd}-%i.log.gz">
             <PatternLayout>
                 <charset>UTF-8</charset>
                 <Pattern>%d{HH:mm:ss.SSS} | %-5level | %msg | %c{1}.%M(%L) | %t | %X{akkaSource}%n</Pattern>
@@ -16,16 +16,13 @@
                     <IfFileName glob="*/*.log.gz" />
                     <IfLastModified age="3d" />
                 </Delete>
-                <Delete basePath="logs" maxDepth="1">
-                    <IfFileName glob="*.log" />
-                    <IfLastModified age="3d" />
-                </Delete>
             </DefaultRolloverStrategy>
         </RollingRandomAccessFile>
     </Appenders>
     <Loggers>
         <Logger name="org.eclipse.jetty.http2.HTTP2Session" level="error"/>
-        <Root level="info">
+        <Logger name="net.arksea.pusher" level="debug"/>
+        <Root level="error">
             <AppenderRef ref="file"/>
         </Root>
     </Loggers>

@@ -11,11 +11,18 @@ public class TestToolMain extends Application {
     @Override
     public void start(Stage primaryStage) throws Exception{
         Parent root = FXMLLoader.load(getClass().getResource("/main.fxml"));
-        primaryStage.setTitle("Hello World");
+        primaryStage.setMinWidth(615);
+        primaryStage.setMinHeight(440);
+        primaryStage.setTitle("Push Test Tool");
         primaryStage.setScene(new Scene(root, 600, 400));
         primaryStage.show();
     }
 
+
+    @Override
+    public void init() throws Exception {
+        // Do some heavy lifting
+    }
 
     public static void main(String[] args) {
         launch(args);

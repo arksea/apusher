@@ -25,3 +25,5 @@
 /push-test-tools/publish/lib
 /push-test-tools/publish/*.jar
 /pusher-huawei/build
+/push-test-tools/publish/config
+/push-test-tools/publish/logs

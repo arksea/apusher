@@ -7,6 +7,7 @@ description = """push test tool"""
 dependencies {
     compile project (':pusher-huawei')
     compile project (':pusher-apns')
+    compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.11.v20170118'
 }
 
 //IDE中运行与调试的配置

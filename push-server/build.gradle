@@ -5,7 +5,8 @@ description = """推送服务"""
 
 dependencies {
     compile project (':pusher-apns')
-//    compile project (':pusher-baidu')
+    compile project (':pusher-huawei')
+    compile project (':pusher-baidu')
     compile project (':push-client')
     compile 'net.arksea:acache:0.8.0-SNAPSHOT'
     compile ("net.arksea:aregister-client:0.4-SNAPSHOT")

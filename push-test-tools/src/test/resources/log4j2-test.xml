@@ -8,7 +8,7 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="net.arksea.pusher.tools" level="debug"/>
+        <Logger name="net.arksea.pusher" level="debug"/>
         <Root level="info">
             <AppenderRef ref="console"/>
         </Root>
