@@ -1,13 +1,24 @@
 apply plugin: 'base'
 apply plugin: 'java'
 apply plugin: 'maven'
+apply plugin: 'no.tornado.fxlauncher'
 
 description = """push test tool"""
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'no.tornado:fxlauncher-gradle-plugin:1.0.20'
+    }
+}
 
 dependencies {
     compile project (':pusher-huawei')
     compile project (':pusher-apns')
     compile 'org.mortbay.jetty.alpn:alpn-boot:8.1.11.v20170118'
+    compile 'org.controlsfx:controlsfx:8.40.12'
 }
 
 //IDE中运行与调试的配置
@@ -48,3 +59,11 @@ task publish <<{
     }
 }
 publish.dependsOn(build)
+
+fxlauncher {
+    applicationVendor 'Push test tool'
+    applicationUrl 'http://172.17.149.9:8077/pushtool'
+    applicationMainClass 'net.arksea.pusher.tools.TestToolMain'
+    acceptDowngrade false
+    deployTarget 'root@172.17.149.9:/data/wwwroot/weather.fxlauncher.com/webroot/pushtool'
+}

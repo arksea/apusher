@@ -14,6 +14,7 @@ repositories {
     mavenLocal()
     maven { url "http://nexus.arksea.net:8081/nexus/content/groups/public/" }
     maven { url "http://repo.maven.apache.org/maven2" }
+    mavenCentral()
 }
 
 dependencies {
