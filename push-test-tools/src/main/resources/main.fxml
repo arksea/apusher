@@ -82,7 +82,7 @@
                                  </padding></Label>
                            </top>
                            <center>
-                              <TextArea fx:id="textAreaHuaweiPayload" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                              <TextArea fx:id="textAreaHuaweiPayload" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="200.0" prefWidth="200.0" text="{&#10;  &quot;hps&quot;: {&#10;    &quot;msg&quot;: {&#10;      &quot;type&quot;: 3,&#10;      &quot;body&quot;: {&#10;        &quot;content&quot;: &quot;十月金秋，满是丰收。那你收获的季节到来了吗？会有什么果实等着你去摘取呢？快看看10 月生肖运势，会带给你怎样的收获?&quot;,&#10;        &quot;title&quot;: &quot;十二生肖 2018 年 10 月运势&quot;&#10;      },&#10;      &quot;action&quot;: {&#10;        &quot;type&quot;: 3,&#10;        &quot;param&quot;: {&#10;          &quot;appPkgName&quot;: &quot;com.calendar.UI&quot;&#10;        }&#10;      }&#10;    },&#10;    &quot;ext&quot;: {&#10;      &quot;biTag&quot;: &quot;Trump&quot;&#10;    }&#10;  }&#10;}" BorderPane.alignment="CENTER">
                                  <BorderPane.margin>
                                     <Insets bottom="10.0" right="15.0" />
                                  </BorderPane.margin></TextArea>

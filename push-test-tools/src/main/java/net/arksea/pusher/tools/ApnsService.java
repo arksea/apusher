@@ -165,6 +165,10 @@ public class ApnsService {
 
     private void saveProps() {
         try {
+            Path path = FileSystems.getDefault().getPath("config");
+            if (!Files.exists(path)) {
+                Files.createDirectory(path);
+            }
             Properties prop = new Properties();
             prop.setProperty("apnsTopic", textFieldApnsTopic.getText());
             prop.setProperty("token", textFieldApnsToken.getText());

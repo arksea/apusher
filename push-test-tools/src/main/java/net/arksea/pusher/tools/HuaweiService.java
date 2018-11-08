@@ -57,7 +57,7 @@ public class HuaweiService {
                 textFieldHuaweiAppKey.setText(prop.getProperty("appKey"));
                 textFieldHuaweiToken.setText(prop.getProperty("token"));
                 String payloadEncoded = prop.getProperty("payload");
-                String payload = new String(Base64.getDecoder().decode(payloadEncoded));
+                String payload = new String(Base64.getDecoder().decode(payloadEncoded.getBytes("UTF-8")), "UTF-8");
                 textAreaPayload.setText(payload);
             }
         } catch (IOException ex) {
@@ -147,11 +147,15 @@ public class HuaweiService {
 
     private void saveProps() {
         try {
+            Path path = FileSystems.getDefault().getPath("config");
+            if (!Files.exists(path)) {
+                Files.createDirectory(path);
+            }
             Properties prop = new Properties();
             prop.setProperty("appId", textFieldHuaweiAppId.getText());
             prop.setProperty("appKey", textFieldHuaweiAppKey.getText());
             prop.setProperty("token", textFieldHuaweiToken.getText());
-            prop.setProperty("payload", Base64.getEncoder().encodeToString(textAreaPayload.getText().getBytes()));
+            prop.setProperty("payload", Base64.getEncoder().encodeToString(textAreaPayload.getText().getBytes("UTF-8")));
             FileOutputStream out = new FileOutputStream("./config/huawei.properties");
             prop.store(out, "Huawei push parameters");
             this.propsChanged = false;

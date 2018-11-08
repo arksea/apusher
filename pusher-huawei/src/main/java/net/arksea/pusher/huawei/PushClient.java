@@ -105,7 +105,7 @@ public class PushClient implements IPushClient<String> {
         }
         try {
             HttpPost post = new HttpPost(PUSH_URL);
-            post.addHeader("Content-Type", "application/x-www-form-urlencoded");
+            post.addHeader("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8");
             LocalDateTime dt = LocalDateTime.ofEpochSecond(event.expiredTime/1000, 0, localZone);
             String expireTime = dt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             StringBuilder tokensBuff = new StringBuilder();
@@ -135,7 +135,7 @@ public class PushClient implements IPushClient<String> {
             NameValuePair p6 = new BasicNameValuePair("expire_time", expireTime);
             logger.debug(p6.toString());
             params.add(p6);
-            HttpEntity entity = new UrlEncodedFormEntity(params);
+            HttpEntity entity = new UrlEncodedFormEntity(params, "UTF-8");
             post.setEntity(entity);
             CloseableHttpResponse response = httpclient.execute(post);
             int code = response.getStatusLine().getStatusCode();
