@@ -103,7 +103,7 @@ public class DailyCastJobCreater extends AbstractActor {
             logger.debug("creating jobs: startTime = {}, mached DailyCast count = {}", startOfToday, castList.size());
             for (DailyCast cast : castList) {
                 if (StringUtils.isEmpty(cast.getDays()) || cast.getDays().indexOf(dayOfWeek)>=0) {
-                    beans.dailyCastService.addCastJob(startOfToday, cast, beans.batchDailyCast);
+                    beans.dailyCastService.addCastJob(startOfToday, cast);
                 }
             }
             ++page;

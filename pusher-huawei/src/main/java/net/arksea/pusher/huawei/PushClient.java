@@ -6,6 +6,7 @@ import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpPost;
@@ -33,20 +34,24 @@ import java.util.Map;
 public class PushClient implements IPushClient<String> {
     private final static Logger logger = LogManager.getLogger(PushClient.class);
     private final static ObjectMapper objectMapper = new ObjectMapper();
-    CloseableHttpClient httpclient;
+    private CloseableHttpClient httpclient;
     private String accessToken;
     private long accessTokenExpiresTime;
-    final private String appId;
-    final private String appKey;
-    final private static String TOKEN_URL = "https://login.cloud.huawei.com/oauth2/v2/token";
-    final private String PUSH_URL;
-    final private ZoneOffset localZone = ZoneOffset.of("+8");
-
+    private final String appId;
+    private final String appKey;
+    private final static String TOKEN_URL = "https://login.cloud.huawei.com/oauth2/v2/token";
+    private final String PUSH_URL;
+    private final ZoneOffset localZone = ZoneOffset.of("+8");
+    private final RequestConfig requestConfig;
     public PushClient(String appId, String appKey) throws UnsupportedEncodingException {
         this.appId = appId;
         this.appKey = appKey;
         String nspCtx = "{\"ver\":\"1\", \"appId\":\"" + appId + "\"}";
         this.PUSH_URL = "https://api.push.hicloud.com/pushsend.do?nsp_ctx=" + URLEncoder.encode(nspCtx, "UTF-8");
+        requestConfig = RequestConfig.custom()
+            .setSocketTimeout(1000)
+            .setConnectTimeout(1000)
+            .build();
     }
 
     @Override
@@ -58,6 +63,7 @@ public class PushClient implements IPushClient<String> {
     private void updateAccessToken(IConnectionStatusListener listener) {
         try {
             HttpPost post = new HttpPost(TOKEN_URL);
+            post.setConfig(requestConfig);
             post.addHeader("Content-Type", "application/x-www-form-urlencoded");
             List<NameValuePair> params = new ArrayList<>();
             params.add(new BasicNameValuePair("grant_type", "client_credentials"));
@@ -105,6 +111,7 @@ public class PushClient implements IPushClient<String> {
         }
         try {
             HttpPost post = new HttpPost(PUSH_URL);
+            post.setConfig(requestConfig);
             post.addHeader("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8");
             LocalDateTime dt = LocalDateTime.ofEpochSecond(event.expiredTime/1000, 0, localZone);
             String expireTime = dt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
@@ -175,6 +182,7 @@ public class PushClient implements IPushClient<String> {
 
     @Override
     public void ping(String session, IConnectionStatusListener listener) {
+        logger.trace("PushClient.ping: {}", session);
         long now = System.currentTimeMillis();
         if (this.accessTokenExpiresTime - now < 600000) {
             updateAccessToken(listener);
@@ -184,11 +192,13 @@ public class PushClient implements IPushClient<String> {
     @Override
     public boolean isAvailable(String session) {
         long now = System.currentTimeMillis();
+        logger.trace("PushClient.isAvailable(), httpclient={}, time={}", httpclient, this.accessTokenExpiresTime - now);
         return httpclient != null && this.accessTokenExpiresTime - now > 300000;
     }
 
     @Override
     public void close(String session) {
+        logger.trace("PushClient.close(), httpclient={}", httpclient);
         if (httpclient != null) {
             try {
                 httpclient.close();

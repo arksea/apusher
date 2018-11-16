@@ -19,4 +19,8 @@ public class PushClientFactory implements IPushClientFactory<String> {
         String appKey = prop.getProperty("product."+productId+".appKey");
         return new PushClient(appId, appKey);
     }
+
+    public int batchPushCount() {
+        return 1000;
+    }
 }

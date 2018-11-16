@@ -27,10 +27,4 @@ public class JobResources {
 
     @Value("${push.resendNoReplyEvent}")
     boolean resendNoReplyEvent;
-
-    @Value("${push.batchCount}")
-    int batchCount;
-
-    @Value("${push.batchDailyCast}")
-    boolean batchDailyCast;
 }

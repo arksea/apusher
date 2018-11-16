@@ -100,8 +100,8 @@ public class PushActor<T> extends AbstractActor {
     private void handlePushEvent(PushEvent event) {
         logger.trace("call handlePushEvent()");
         if (isAvailable()) {
+            sender().tell(true, self()); //返回状态放在PushClient.push前，防止因其是阻塞类型的实现而影响吞吐率，以及导致超时造成的重复提交
             state.pushClient.push(session, event, connStatusListener, state.pushStatusListener);
-            sender().tell(true, self());
         } else {
             sender().tell(false, self());
         }

@@ -198,13 +198,12 @@ public class CastJobActor extends AbstractActor {
             _pushOneRetryEvent(it.next());
         } else if (state.targets == null || state.targets.isEmpty()) {
             delayNextPage(false);
-        } else if (job.getCastType() == CastType.BATCH_BROAD ||
-                   job.getCastType() == CastType.BATCH_DAILY ||
-                   job.getCastType() == CastType.BATCH_SITUS ||
-                   job.getCastType() == CastType.BATCH_SITUSGROUP) {
-            _pushBatchTargets();
         } else {
-            _pushOneTarget();
+            if (pushClientFactory.batchPushCount() > 1) {
+                _pushBatchTargets();
+            } else {
+                _pushOneTarget();
+            }
         }
     }
     private void _pushOneRetryEvent(PushEvent event) {
@@ -213,7 +212,7 @@ public class CastJobActor extends AbstractActor {
     //---------------------------------------------------------------------------------------------------
     private void _pushBatchTargets() {
         int size = state.targets.size();
-        int count = Math.min(beans.batchCount, size);
+        int count = Math.min(pushClientFactory.batchPushCount(), size);
         if (size > count && size - count < 30) {
             count = size / 2;
         }
@@ -272,6 +271,7 @@ public class CastJobActor extends AbstractActor {
     private void _doPush(PushEvent event, Object succeedMsg) {
         final long start = System.currentTimeMillis();
         state.submitedEvents.add(event);
+        logger.trace("state.submitedEvents.add(event): {}", event);
         pusher.push(event).onComplete(FutureUtils.completer(
             (ex, result) -> {
                 long time = System.currentTimeMillis() - start;
@@ -282,6 +282,7 @@ public class CastJobActor extends AbstractActor {
                         self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                     }
                 } else { //超时异常表示没有可用PushActor，其他异常表示提交失败
+                    logger.trace("push failed", ex);
                     self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                 }
             }
@@ -492,6 +493,7 @@ public class CastJobActor extends AbstractActor {
                     }
                 }
                 state.submitedEvents.clear();
+                logger.trace("state.submitedEvents.clear()");
                 this.waitForReplySeconds = 0;
                 _pushOne();
             } else {

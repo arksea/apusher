@@ -57,11 +57,9 @@ public class TargetSourceFactory {
                 userList.addAll(Arrays.asList(strs));
                 return new SpecifiedTargetSource(pushTargetService, userList);
             case SITUS:
-            case BATCH_SITUS:
                 String situs = job.getCastTarget();
                 return new SitusCastTargetSource(pushTargetService, situs, maxPusherCount);
             case SITUSGROUP:
-            case BATCH_SITUSGROUP:
                 List<String> situsGroups = new LinkedList<>();
                 String[] strs2 = StringUtils.split(job.getCastTarget(),",");
                 if (strs2.length == 0) {
@@ -70,12 +68,10 @@ public class TargetSourceFactory {
                 situsGroups.addAll(Arrays.asList(strs2));
                 return new SitusGroupCastTargetSource(pushTargetService, situsGroups, maxPusherCount);
             case BROAD:
-            case BATCH_BROAD:
                 return partitionalTargetSource;
             case USER_DAILY_TIMER:
                 return userDailyTimerTargetSource;
             case USER_DAILY:
-            case BATCH_DAILY:
                 return dailyCastTargetSource;
             default:
                 return null;
