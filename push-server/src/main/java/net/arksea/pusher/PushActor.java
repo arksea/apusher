@@ -4,6 +4,7 @@ import akka.actor.AbstractActor;
 import akka.actor.Cancellable;
 import akka.actor.Props;
 import akka.japi.Creator;
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.concurrent.duration.Duration;
@@ -98,12 +99,19 @@ public class PushActor<T> extends AbstractActor {
     }
     //------------------------------------------------------------------------------------
     private void handlePushEvent(PushEvent event) {
-        logger.trace("call handlePushEvent()");
+        long start = System.currentTimeMillis();
+        logger.trace("call handlePushEvent() start");
         if (isAvailable()) {
             sender().tell(true, self()); //返回状态放在PushClient.push前，防止因其是阻塞类型的实现而影响吞吐率，以及导致超时造成的重复提交
             state.pushClient.push(session, event, connStatusListener, state.pushStatusListener);
         } else {
             sender().tell(false, self());
+        }
+        long time = System.currentTimeMillis() - start;
+        if (time > 1500) {
+            logger.warn("handlePushEvent() use time={}ms", time);
+        } else {
+            logger.trace("call handlePushEvent() end, use time={}ms", time);
         }
     }
     //------------------------------------------------------------------------------------
