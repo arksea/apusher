@@ -34,7 +34,6 @@ import java.util.Map;
 public class PushClient implements IPushClient<String> {
     private final static Logger logger = LogManager.getLogger(PushClient.class);
     private final static ObjectMapper objectMapper = new ObjectMapper();
-    private CloseableHttpClient httpclient;
     private String accessToken;
     private long accessTokenExpiresTime;
     private final String appId;
@@ -56,11 +55,12 @@ public class PushClient implements IPushClient<String> {
 
     @Override
     public void connect(IConnectionStatusListener listener) throws Exception {
-        httpclient = HttpClients.createDefault();
-        updateAccessToken(listener);
+        try (CloseableHttpClient client = HttpClients.createDefault()) {
+            updateAccessToken(client, listener);
+        }
     }
 
-    private void updateAccessToken(IConnectionStatusListener listener) {
+    private void updateAccessToken(CloseableHttpClient httpclient, IConnectionStatusListener listener) {
         try {
             HttpPost post = new HttpPost(TOKEN_URL);
             post.setConfig(requestConfig);
@@ -109,7 +109,7 @@ public class PushClient implements IPushClient<String> {
             statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
             return;
         }
-        try {
+        try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
             HttpPost post = new HttpPost(PUSH_URL);
             post.setConfig(requestConfig);
             post.addHeader("Content-Type", "application/x-www-form-urlencoded;charset=UTF-8");
@@ -181,31 +181,24 @@ public class PushClient implements IPushClient<String> {
     }
 
     @Override
-    public void ping(String session, IConnectionStatusListener listener) {
+    public void ping(String session, IConnectionStatusListener listener) throws Exception {
         logger.trace("PushClient.ping: {}", session);
         long now = System.currentTimeMillis();
         if (this.accessTokenExpiresTime - now < 600000) {
-            updateAccessToken(listener);
+            connect(listener);
         }
     }
 
     @Override
     public boolean isAvailable(String session) {
         long now = System.currentTimeMillis();
-        logger.trace("PushClient.isAvailable(), httpclient={}, time={}", httpclient, this.accessTokenExpiresTime - now);
-        return httpclient != null && this.accessTokenExpiresTime - now > 300000;
+        logger.trace("PushClient.isAvailable(), time={}", this.accessTokenExpiresTime - now);
+        return this.accessTokenExpiresTime - now > 300000;
     }
 
     @Override
     public void close(String session) {
-        logger.trace("PushClient.close(), httpclient={}", httpclient);
-        if (httpclient != null) {
-            try {
-                httpclient.close();
-            } catch (IOException e) {
-                logger.warn("Close connection failed", e);
-            }
-        }
-        httpclient = null;
+        logger.trace("PushClient.close()");
+        this.accessTokenExpiresTime = 0;
     }
 }

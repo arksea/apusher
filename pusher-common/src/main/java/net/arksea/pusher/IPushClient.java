@@ -7,7 +7,7 @@ package net.arksea.pusher;
 public interface IPushClient<T> {
     void connect(IConnectionStatusListener listener) throws Exception;
     void push(T session, PushEvent event, IConnectionStatusListener connListener,IPushStatusListener statusListener);
-    void ping(T session, IConnectionStatusListener listener);
+    void ping(T session, IConnectionStatusListener listener) throws Exception;
     boolean isAvailable(T session);
     void close(T session);
 }

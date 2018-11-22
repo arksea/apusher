@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Base64;
 import java.util.Properties;
 import java.util.UUID;
@@ -49,7 +50,7 @@ public class HuaweiService {
 
     public void init() {
         try {
-            Path path = FileSystems.getDefault().getPath("config", "huawei.properties");
+            Path path = Paths.get("config", "huawei.properties");
             if (Files.exists(path)) {
                 Properties prop = new Properties();
                 prop.load(new FileInputStream("./config/huawei.properties"));
@@ -147,7 +148,7 @@ public class HuaweiService {
 
     private void saveProps() {
         try {
-            Path path = FileSystems.getDefault().getPath("config");
+            Path path = Paths.get("config");
             if (!Files.exists(path)) {
                 Files.createDirectory(path);
             }

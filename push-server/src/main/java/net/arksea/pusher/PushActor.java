@@ -141,7 +141,7 @@ public class PushActor<T> extends AbstractActor {
     }
     //------------------------------------------------------------------------------------
     private static class Ping {}
-    private void handlePing(Ping msg) {
+    private void handlePing(Ping msg) throws Exception {
         if (state.pushClient.isAvailable(session)) {
             state.pushClient.ping(session, connStatusListener);
         }
