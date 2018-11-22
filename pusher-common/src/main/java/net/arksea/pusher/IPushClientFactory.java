@@ -5,4 +5,7 @@ package net.arksea.pusher;
  */
 public interface IPushClientFactory<T> {
     IPushClient<T> create(String name, String productId) throws Exception;
+    default int batchPushCount() {
+        return 1;
+    }
 }

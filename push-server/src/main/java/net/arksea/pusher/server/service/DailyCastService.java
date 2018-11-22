@@ -71,7 +71,6 @@ public class DailyCastService {
         dailyCastDao.save(cast);
     }
 
-
     private CastJob makeCastJob(ZonedDateTime startOfToday, DailyCast cast) {
         CastJob job = new CastJob();
         job.setDescription(cast.getDescription());

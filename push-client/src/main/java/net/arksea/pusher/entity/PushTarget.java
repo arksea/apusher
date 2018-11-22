@@ -64,7 +64,7 @@ public class PushTarget extends IdEntity implements Cloneable {
         this.userId = userId;
     }
 
-    @Column(columnDefinition = "VARCHAR(64) NOT NULL DEFAULT ''")
+    @Column(columnDefinition = "VARCHAR(130) NOT NULL DEFAULT ''")
     public String getToken() {
         return token;
     }
@@ -139,18 +139,5 @@ public class PushTarget extends IdEntity implements Cloneable {
     @Override
     public PushTarget clone() throws CloneNotSupportedException {
         return (PushTarget) super.clone();
-//        PushTarget t = new PushTarget();
-//        t.setId(this.getId());
-//        t.setProduct(this.getProduct());
-//        t.setUserId(this.getUserId());
-//        t.setUserInfo(this.getUserInfo());
-//        t.setToken(this.getToken());
-//        t.setTokenActived(this.isTokenActived());
-//        t.setLocation(this.getLocation());
-//        t.setSitus(this.getSitus());
-//        t.setSitusGroup(this.getSitusGroup());
-//        t.setPartitions(this.getPartitions());
-//        t.setPayload(this.getPayload());
-//        return t;
     }
 }

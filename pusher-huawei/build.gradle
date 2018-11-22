@@ -1,0 +1,12 @@
+apply plugin: 'base'
+apply plugin: 'java'
+apply plugin: 'maven'
+
+description = """Huawei Pusher"""
+
+dependencies {
+    compile project (':pusher-common')
+    compile 'org.apache.httpcomponents:httpclient:4.5.1'
+    compile 'org.apache.commons:commons-lang3:3.3.2'
+    compile 'com.fasterxml.jackson.core:jackson-databind:2.4.0'
+}

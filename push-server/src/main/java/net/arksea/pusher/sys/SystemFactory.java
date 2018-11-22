@@ -1,6 +1,7 @@
 package net.arksea.pusher.sys;
 
 import akka.actor.ActorSystem;
+import akka.actor.Terminated;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 import net.arksea.dsf.register.RegisterClient;
@@ -70,12 +71,12 @@ public class SystemFactory {
     @PreDestroy
     public void stop() {
         try {
-            logger.info("Stopping config server system");
-            Future f = system.terminate();
-            Await.result(f, Duration.apply(10, TimeUnit.SECONDS));
-            logger.info("Config server system stopped");
+            logger.info("Stopping push server system");
+            Future<Terminated> f = system.terminate();
+            Terminated t = Await.result(f, Duration.apply(10, TimeUnit.SECONDS));
+            logger.info("Push server system stopped");
         } catch (Exception e) {
-            logger.warn("Stop config server system timeout", e);
+            logger.warn("Stop push server system timeout", e);
         }
         if (registerClient != null) {
             registerClient.stopAndWait(10);

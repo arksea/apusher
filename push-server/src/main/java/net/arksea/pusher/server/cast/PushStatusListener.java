@@ -25,7 +25,7 @@ public class PushStatusListener  implements IPushStatusListener {
                 break;
             case INVALID_TOKEN:
                 jobActor.tell(new CastJobActor.PushInvalid(event), ActorRef.noSender());
-                this.beans.pushTargetService.updateTokenStatus(event.token, false);
+                this.beans.pushTargetService.updateTokenStatus(event.tokens[0], false);
                 break;
             case PUSH_SUCCEED:
             default:
