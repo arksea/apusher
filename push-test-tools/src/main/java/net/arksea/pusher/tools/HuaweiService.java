@@ -7,7 +7,6 @@ import javafx.scene.control.TextField;
 import net.arksea.pusher.IConnectionStatusListener;
 import net.arksea.pusher.IPushStatusListener;
 import net.arksea.pusher.PushEvent;
-import net.arksea.pusher.PushStatus;
 import net.arksea.pusher.huawei.PushClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,22 +108,17 @@ public class HuaweiService {
             },
             new IPushStatusListener() {
                 @Override
-                public void onComplete(PushEvent event, PushStatus status) {
-                    Platform.runLater(() -> close(session));
-                    switch (status) {
-                        case PUSH_FAILD:
-                            ErrorDialog.show("推送失败");
-                            break;
-                        case INVALID_TOKEN:
-                            ErrorDialog.show("Token无效");
-                            break;
-                        case PUSH_SUCCEED:
-                            logger.debug("推送成功");
-                            pushSucceed();
-                            break;
-                        default:
-                            break;
-                    }
+                public void onPushSucceed(PushEvent event, int succeedCount) {
+                    logger.debug("推送成功");
+                }
+
+                @Override
+                public void onPushFailed(PushEvent event, int failedCount) {
+                    ErrorDialog.show("推送失败");
+                }
+
+                @Override
+                public void handleInvalidToken(String token) {
                 }
             });
     }

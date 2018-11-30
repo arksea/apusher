@@ -127,7 +127,7 @@ public class PushClient implements IPushClient<Session> {
     @Override
     public void push(Session session, PushEvent event, IConnectionStatusListener connListener, IPushStatusListener statusListener) {
         if (event.testEvent) {
-            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+            statusListener.onPushSucceed(event, 1);
             return;
         }
 
@@ -153,7 +153,7 @@ public class PushClient implements IPushClient<Session> {
                     }
                     public void failed(Throwable ex) {//没有及时调用ping会造成此处EofException
                         logger.debug("stream.data Callback.failed");
-                        statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                        statusListener.onPushFailed(event, 1);
                         connListener.onFailed();
                     }
                 });
@@ -162,7 +162,7 @@ public class PushClient implements IPushClient<Session> {
             @Override
             public void failed(Throwable ex) {
                 logger.debug("stream.newStream failed", ex);
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, 1);
                 connListener.onFailed();
             }
         }, responseListener);

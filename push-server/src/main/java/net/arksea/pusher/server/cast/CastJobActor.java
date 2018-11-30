@@ -84,7 +84,6 @@ public class CastJobActor extends AbstractActor {
             .match(RetrySucceed.class, this::handleRetrySucceed)
             .match(PushSucceed.class,  this::handlePushSucceed)
             .match(PushFailed.class,   this::handlePushFailed)
-            .match(PushInvalid.class,   this::handlePushInvalid)
             .match(NextPage.class,     this::handleNextPage)
             .match(PageTargets.class,  this::handlePageTargets)
             .match(JobFinished.class,  this::handleJobFinished)
@@ -316,15 +315,17 @@ public class CastJobActor extends AbstractActor {
         for (PushTarget t : msg.targets) {
             targetSucceed(t);
         }
+        _pushOne();
     }
     //完成一个target的处理（推送或不送）、设置job进度，并开始下个target的处理
     private void targetSucceed(PushTarget t) {
-        PushTarget t1 = state.targets.remove(0);
-        if (!t.getId().equals(t1.getId())) {
-            logger.fatal("assert failed: the removed target is not specified target");
+        if (state.targets.size() > 0) {
+            PushTarget t1 = state.targets.remove(0);
+            if (!t.getId().equals(t1.getId())) {
+                logger.fatal("assert failed: the removed target is not specified target");
+            }
+            job.setLastUserId(t1.getUserId());
         }
-        job.setLastUserId(t1.getUserId());
-        _pushOne();
     }
     //------------------------------------------------------------------------------------------------------------------
     /**
@@ -511,8 +512,10 @@ public class CastJobActor extends AbstractActor {
      */
     static class PushSucceed {
         public final PushEvent event;
-        public PushSucceed(PushEvent event) {
+        public final int succeedCount;
+        public PushSucceed(PushEvent event,int succeedCount) {
             this.event = event;
+            this.succeedCount = succeedCount;
         }
     }
     private void handlePushSucceed(PushSucceed msg) {
@@ -521,6 +524,7 @@ public class CastJobActor extends AbstractActor {
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
         }
+
         int succeed = 1;
         if (job.getSucceedCount() != null) {
             succeed = job.getSucceedCount() + 1;
@@ -535,8 +539,10 @@ public class CastJobActor extends AbstractActor {
      */
     static class PushFailed {
         public final PushEvent event;
-        public PushFailed(PushEvent event) {
+        public final int failedCount;
+        public PushFailed(PushEvent event, int failedCount) {
             this.event = event;
+            this.failedCount = failedCount;
         }
     }
     private void handlePushFailed(PushFailed msg) {
@@ -548,25 +554,8 @@ public class CastJobActor extends AbstractActor {
         if (msg.event.getRetryCount() < MAX_RETRY_PUSH) {
             state.retryEvents.add(msg.event);
         } else {
-            int failed = job.getFailedCount() + 1;
+            int failed = job.getFailedCount() + msg.failedCount;
             this.job.setFailedCount(failed);
-        }
-    }
-    //----------------------------------------------------------------------------------------------------------
-    /**
-     * 用户状态异常造成的推送失败，不做推送成功与失败计数
-     */
-    static class PushInvalid {
-        public final PushEvent event;
-        public PushInvalid(PushEvent event) {
-            this.event = event;
-        }
-    }
-    public void handlePushInvalid(PushInvalid msg) {
-        logger.trace("call onPushValid(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
-        boolean removed = state.submitedEvents.remove(msg.event);
-        if (!removed) {
-            logger.warn("event not in submited list!");
         }
     }
     //----------------------------------------------------------------------------------------------------------

@@ -3,7 +3,6 @@ package net.arksea.pusher.apns;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.arksea.pusher.IPushStatusListener;
 import net.arksea.pusher.PushEvent;
-import net.arksea.pusher.PushStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http.MetaData;
@@ -46,7 +45,7 @@ public class ResponseListener extends Stream.Listener.Adapter {
             status.set(response.getStatus());
             onHeaderThreadId.set(Thread.currentThread().getId());
             if (response.getStatus() == 200) {
-                statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+                statusListener.onPushSucceed(event, 1);
             }
             //此处不回调，留到onData里判断返回的错误reason后再回调
             //else {
@@ -93,12 +92,12 @@ public class ResponseListener extends Stream.Listener.Adapter {
             } else {
                 log.warn("push failed: eventId={},topic={}", event.id, event.topic, reasonObj);
             }
-            statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+            statusListener.onPushFailed(event, 1);
         } else {
             String reason = reasonObj.toString();
             if (status == -1 || status == 500 || status == 503) {
                 log.warn("apns push failed: status={},reason={},eventId={},topic={}", status, reason, event.id, event.topic);
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, 1);
             } else {
                 switch (reason) {
                     case "DeviceTokenNotForTopic":
@@ -111,7 +110,8 @@ public class ResponseListener extends Stream.Listener.Adapter {
                     case "TooManyRequests":  //Too many requests were made consecutively to the same device token.
                         //这些状态表明是用户状态异常造成的推送失败，不做推送成功与失败计数
                         //并将tokenActive设置成false，下次不再向他推送
-                        statusListener.onComplete(event, PushStatus.INVALID_TOKEN);
+                        statusListener.onPushFailed(event, 1);
+                        statusListener.handleInvalidToken(event.tokens[0]);
                         log.debug("apns push failed: status={},reason={},eventId={},topic={},token={}", status, reason, event.id, event.topic,event.tokens[0]);
                         break;
                     case "InternalServerError":
@@ -119,7 +119,7 @@ public class ResponseListener extends Stream.Listener.Adapter {
                     case "Shutdown":
                     default:
                         log.warn("apns push failed: status={},reason={},eventId={},topic={}", status, reason, event.id, event.topic);
-                        statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                        statusListener.onPushFailed(event, 1);
                         break;
                 }
             }

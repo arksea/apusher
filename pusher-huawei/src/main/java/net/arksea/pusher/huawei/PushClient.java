@@ -106,7 +106,7 @@ public class PushClient implements IPushClient<String> {
     @Override
     public void push(String session, PushEvent event, IConnectionStatusListener connListener, IPushStatusListener statusListener) {
         if (event.testEvent) {
-            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+            statusListener.onPushSucceed(event, event.tokens.length);
             return;
         }
         try (CloseableHttpClient httpclient = HttpClients.createDefault()) {
@@ -153,29 +153,44 @@ public class PushClient implements IPushClient<String> {
             }
             if (code == 503) { //系统级失败：流控
                 logger.warn("华为推送流控错误");
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, event.tokens.length);
             } else if (code != 200) { //系统级失败：通讯错误
                 logger.warn("华为推送错误, statusCode={}", code);
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, event.tokens.length);
                 connListener.onFailed();
             } else if (nspStatus != null && !"0".equals(nspStatus)) { // 系统级失败
                 logger.warn("华为推送错误, nspStatus={}", nspStatus);
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, event.tokens.length);
                 connListener.onFailed();
             } else {
                 String body = readBody(response);
                 Map map = objectMapper.readValue(body, Map.class);
                 String scode = (String) map.get("code");
                 if ("80000000".equals(scode)) { //成功
-                    statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+                    logger.debug("华为推送成功, body={}, tokens.length={}", body, event.tokens.length);
+                    statusListener.onPushSucceed(event, event.tokens.length);
                 } else { //应用级失败
-                    logger.warn("华为推送错误, body={}", body);
-                    statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                    logger.warn("华为推送错误, body={}, tokens.length={}", body, event.tokens.length);
+                    Object obj = map.get("illegal_tokens");
+                    if (obj != null && obj instanceof List) {
+                        Integer success = (Integer)map.get("success");
+                        if (success == null || success == 0) {
+                            statusListener.onPushFailed(event, event.tokens.length);
+                        } else {
+                            statusListener.onPushSucceed(event, success);
+                        }
+                        List<String> tokens = (List<String>) obj;
+                        for (String token : tokens) {
+                            statusListener.handleInvalidToken(token);
+                        }
+                    } else {
+                        statusListener.onPushFailed(event, event.tokens.length);
+                    }
                 }
             }
         } catch (Exception ex) {
             logger.warn("huawei push failed", ex);
-            statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+            statusListener.onPushFailed(event, event.tokens.length);
             connListener.onFailed();
         }
     }

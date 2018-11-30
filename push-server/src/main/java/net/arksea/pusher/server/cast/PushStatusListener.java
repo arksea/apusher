@@ -3,7 +3,6 @@ package net.arksea.pusher.server.cast;
 import akka.actor.ActorRef;
 import net.arksea.pusher.PushEvent;
 import net.arksea.pusher.IPushStatusListener;
-import net.arksea.pusher.PushStatus;
 
 /**
  *
@@ -16,21 +15,16 @@ public class PushStatusListener  implements IPushStatusListener {
         this.jobActor = jobActor;
         this.beans = beans;
     }
-
     @Override
-    public void onComplete(PushEvent event, PushStatus status) {
-        switch (status) {
-            case PUSH_FAILD:
-                jobActor.tell(new CastJobActor.PushFailed(event), ActorRef.noSender());
-                break;
-            case INVALID_TOKEN:
-                jobActor.tell(new CastJobActor.PushInvalid(event), ActorRef.noSender());
-                this.beans.pushTargetService.updateTokenStatus(event.tokens[0], false);
-                break;
-            case PUSH_SUCCEED:
-            default:
-                jobActor.tell(new CastJobActor.PushSucceed(event), ActorRef.noSender());
-                break;
-        }
+    public void onPushSucceed(PushEvent event, int succeedCount) {
+        jobActor.tell(new CastJobActor.PushSucceed(event, succeedCount), ActorRef.noSender());
+    }
+    @Override
+    public void onPushFailed(PushEvent event, int failedCount) {
+        jobActor.tell(new CastJobActor.PushFailed(event, failedCount), ActorRef.noSender());
+    }
+    @Override
+    public void handleInvalidToken(String token) {
+        this.beans.pushTargetService.updateTokenStatus(token, false);
     }
 }
