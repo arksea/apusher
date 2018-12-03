@@ -103,6 +103,11 @@ public class PushClient implements IPushClient<String> {
         return sb.toString();
     }
 
+    private boolean validToken(String token) {
+        int len = token.length();
+        return len==32 || len==130;
+    }
+
     @Override
     public void push(String session, PushEvent event, IConnectionStatusListener connListener, IPushStatusListener statusListener) {
         if (event.testEvent) {
@@ -117,10 +122,21 @@ public class PushClient implements IPushClient<String> {
             String expireTime = dt.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
             StringBuilder tokensBuff = new StringBuilder();
             tokensBuff.append("[");
+            int n = 0;
             for (String t : event.tokens) {
-                tokensBuff.append("\"");
-                tokensBuff.append(t);
-                tokensBuff.append("\",");
+                if (validToken(t)) {
+                    ++n;
+                    tokensBuff.append("\"");
+                    tokensBuff.append(t);
+                    tokensBuff.append("\",");
+                } else {
+                    statusListener.handleInvalidToken(t);
+                }
+            }
+            if (n == 0) {
+                statusListener.onPushSucceed(event, event.tokens.length);
+                logger.debug("华为推送成功, tokens.length={}", event.tokens.length);
+                return;
             }
             tokensBuff.setCharAt(tokensBuff.length() - 1, ']');
             List<NameValuePair> params = new ArrayList<>();
@@ -170,28 +186,47 @@ public class PushClient implements IPushClient<String> {
                     logger.debug("华为推送成功, body={}, tokens.length={}", body, event.tokens.length);
                     statusListener.onPushSucceed(event, event.tokens.length);
                 } else { //应用级失败
-                    logger.warn("华为推送错误, body={}, tokens.length={}", body, event.tokens.length);
-                    Object obj = map.get("illegal_tokens");
-                    if (obj != null && obj instanceof List) {
-                        Integer success = (Integer)map.get("success");
-                        if (success == null || success == 0) {
-                            statusListener.onPushFailed(event, event.tokens.length);
-                        } else {
-                            statusListener.onPushSucceed(event, success);
-                        }
-                        List<String> tokens = (List<String>) obj;
-                        for (String token : tokens) {
-                            statusListener.handleInvalidToken(token);
-                        }
-                    } else {
-                        statusListener.onPushFailed(event, event.tokens.length);
-                    }
+                    String msg = (String) map.get("msg");
+                    Map msgMap = objectMapper.readValue(msg, Map.class);
+                    handleMessage(msgMap, body, event, statusListener);
                 }
             }
         } catch (Exception ex) {
             logger.warn("huawei push failed", ex);
             statusListener.onPushFailed(event, event.tokens.length);
             connListener.onFailed();
+        }
+    }
+
+    private void handleMessage(Map map,  String body, PushEvent event, IPushStatusListener statusListener) {
+        if (map == null) {
+            statusListener.onPushFailed(event, event.tokens.length);
+            logger.warn("华为推送错误, body={}, tokens.length={}", body, event.tokens.length);
+            return;
+        }
+        Object obj = map.get("illegal_tokens");
+        if (obj != null) {
+            if (obj instanceof List) {
+                List<String> tokens = (List<String>) obj;
+                Integer success = (Integer) map.get("success");
+                if (success == null || success == 0) {
+                    logger.debug("华为推送成功, body={}, tokens.length={}, illegal_tokens={}",
+                        body, event.tokens.length, tokens.size());
+                } else {
+                    statusListener.onPushSucceed(event, success);
+                    logger.debug("华为推送成功, body={}, tokens.length={}, illegal_tokens={}",
+                        body, event.tokens.length, tokens.size());
+                }
+                for (String token : tokens) {
+                    statusListener.handleInvalidToken(token);
+                }
+            } else {
+                statusListener.onPushFailed(event, event.tokens.length);
+                logger.warn("华为推送错误, body={}, tokens.length={}, obj.class={}", body, event.tokens.length, obj.getClass());
+            }
+        } else {
+            statusListener.onPushFailed(event, event.tokens.length);
+            logger.warn("华为推送错误, body={}, tokens.length={}", body, event.tokens.length);
         }
     }
 

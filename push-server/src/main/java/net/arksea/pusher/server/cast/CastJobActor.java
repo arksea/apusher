@@ -45,6 +45,7 @@ public class CastJobActor extends AbstractActor {
     private final ITargetSource targetSource;
     private IPushClientFactory pushClientFactory;
     private IPusher pusher;
+    private final int batchCount;
 
     private long submitFailedBeginTime;
     private final static JsonSlurper jsonSlurper = new JsonSlurper();
@@ -61,6 +62,7 @@ public class CastJobActor extends AbstractActor {
         this.state = state;
         this.beans = beans;
         this.job = job;
+        this.batchCount = this.pushClientFactory.batchPushCount();
         if (!StringUtils.isEmpty(job.getTestTarget())) {
             testTargets = new HashSet<>();
             String[] strs = StringUtils.split(job.getTestTarget(), ",");
@@ -198,7 +200,7 @@ public class CastJobActor extends AbstractActor {
         } else if (state.targets == null || state.targets.isEmpty()) {
             delayNextPage(false);
         } else {
-            if (pushClientFactory.batchPushCount() > 1) {
+            if (this.batchCount > 1) {
                 _pushBatchTargets();
             } else {
                 _pushOneTarget();
@@ -211,12 +213,13 @@ public class CastJobActor extends AbstractActor {
     //---------------------------------------------------------------------------------------------------
     private void _pushBatchTargets() {
         int size = state.targets.size();
-        int count = Math.min(pushClientFactory.batchPushCount(), size);
+        int count = Math.min(this.batchCount, size);
         if (size > count && size - count < 30) {
             count = size / 2;
         }
         List<String> tokens = new LinkedList<>();
         List<PushTarget> targets = new LinkedList<>();
+        List<PushTarget> filted = new LinkedList<>();
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; ++i) {
             PushTarget t = state.targets.get(i);
@@ -224,9 +227,11 @@ public class CastJobActor extends AbstractActor {
                 tokens.add(state.targets.get(i).getToken());
                 targets.add(t);
             } else {
-                targetSucceed(t);
+                filted.add(t);
             }
         }
+        filted.forEach(this::targetSucceed);
+        filted.clear();
         long time = System.currentTimeMillis() - start;
         state.userFilterTime += time;
         PushTarget t = state.targets.get(0);
@@ -525,9 +530,9 @@ public class CastJobActor extends AbstractActor {
             logger.warn("assert failed: event not in submited list!");
         }
 
-        int succeed = 1;
+        int succeed = msg.succeedCount;
         if (job.getSucceedCount() != null) {
-            succeed = job.getSucceedCount() + 1;
+            succeed = job.getSucceedCount() + msg.succeedCount;
         }
         this.job.setSucceedCount(succeed);
     }
