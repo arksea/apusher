@@ -7,5 +7,6 @@ package net.arksea.pusher;
 public interface IPushStatusListener {
     void onPushSucceed(PushEvent event, int succeedCount);
     void onPushFailed(PushEvent event, int failedCount);
+    void onRateLimit(PushEvent event);
     void handleInvalidToken(String token);
 }

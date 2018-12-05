@@ -39,6 +39,7 @@ public class CastJobService {
 
     public CastJob addCastJob(CastJob job) {
         if (job.getId() == null) {
+            logger.info("addCastJob: {}", job.getDescription());
             ITargetSource source = targetSourceFactory.createTargetSource(job);
             if (source.hasPushTargets(job)) {
                 //不允许客户端设置推送计数,与完成时间
@@ -79,6 +80,7 @@ public class CastJobService {
                 ++count;
             }
         }
+        logger.info("addCastJobs: count={}", count);
         return count;
     }
 
@@ -143,6 +145,7 @@ public class CastJobService {
     }
 
     public void deleteCastJob(long id) {
+        logger.info("delete CastJob: {}", id);
         castJobDao.delete(id);
     }
 

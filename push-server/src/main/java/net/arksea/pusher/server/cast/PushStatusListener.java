@@ -23,6 +23,12 @@ public class PushStatusListener  implements IPushStatusListener {
     public void onPushFailed(PushEvent event, int failedCount) {
         jobActor.tell(new CastJobActor.PushFailed(event, failedCount), ActorRef.noSender());
     }
+
+    @Override
+    public void onRateLimit(PushEvent event) {
+        jobActor.tell(new CastJobActor.PushRateLimit(event), ActorRef.noSender());
+    }
+
     @Override
     public void handleInvalidToken(String token) {
         this.beans.pushTargetService.updateTokenStatus(token, false);

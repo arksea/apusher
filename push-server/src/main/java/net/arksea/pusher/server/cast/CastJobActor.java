@@ -59,10 +59,11 @@ public class CastJobActor extends AbstractActor {
 
     private CastJobActor(State state, JobResources beans, CastJob job, ITargetSource targetSource,
                          UserFilter userFilter, IPushClientFactory pushClientFactory) {
+        this.pushClientFactory = pushClientFactory;
+        this.batchCount = pushClientFactory.batchPushCount();
         this.state = state;
         this.beans = beans;
         this.job = job;
-        this.batchCount = this.pushClientFactory.batchPushCount();
         if (!StringUtils.isEmpty(job.getTestTarget())) {
             testTargets = new HashSet<>();
             String[] strs = StringUtils.split(job.getTestTarget(), ",");
@@ -73,7 +74,6 @@ public class CastJobActor extends AbstractActor {
         }
         this.userFilter = userFilter;
         this.targetSource = targetSource;
-        this.pushClientFactory = pushClientFactory;
         this.tokenStatusListener = new PushStatusListener(self(), beans);
         this.pusherCount = targetSource.getPusherCount(job);
     }
@@ -86,6 +86,7 @@ public class CastJobActor extends AbstractActor {
             .match(RetrySucceed.class, this::handleRetrySucceed)
             .match(PushSucceed.class,  this::handlePushSucceed)
             .match(PushFailed.class,   this::handlePushFailed)
+            .match(PushRateLimit.class,this::handlePushRateLimit)
             .match(NextPage.class,     this::handleNextPage)
             .match(PageTargets.class,  this::handlePageTargets)
             .match(JobFinished.class,  this::handleJobFinished)
@@ -200,7 +201,7 @@ public class CastJobActor extends AbstractActor {
         } else if (state.targets == null || state.targets.isEmpty()) {
             delayNextPage(false);
         } else {
-            if (this.batchCount > 1) {
+            if (this.batchCount > 1 && testTargets == null) {
                 _pushBatchTargets();
             } else {
                 _pushOneTarget();
@@ -214,24 +215,21 @@ public class CastJobActor extends AbstractActor {
     private void _pushBatchTargets() {
         int size = state.targets.size();
         int count = Math.min(this.batchCount, size);
-        if (size > count && size - count < 30) {
+        if (size > count && size - count < 30) { //避免最后一批个数太少，与倒数第二批平均一下
             count = size / 2;
         }
         List<String> tokens = new LinkedList<>();
         List<PushTarget> targets = new LinkedList<>();
-        List<PushTarget> filted = new LinkedList<>();
+        List<PushTarget> theBatch = new LinkedList<>();
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; ++i) {
             PushTarget t = state.targets.get(i);
             if (userFilter.doFilter(t)) {
                 tokens.add(state.targets.get(i).getToken());
                 targets.add(t);
-            } else {
-                filted.add(t);
             }
+            theBatch.add(t);
         }
-        filted.forEach(this::targetSucceed);
-        filted.clear();
         long time = System.currentTimeMillis() - start;
         state.userFilterTime += time;
         PushTarget t = state.targets.get(0);
@@ -242,7 +240,7 @@ public class CastJobActor extends AbstractActor {
             payload,
             job.getPayloadType(),
             job.getExpiredTime().getTime());
-        _doPush(event,new TargetSucceed(targets.toArray(new PushTarget[targets.size()])));
+        _doPush(event,new TargetSucceed(theBatch.toArray(new PushTarget[theBatch.size()])));
     }
     //---------------------------------------------------------------------------------------------------
     private void _pushOneTarget() {
@@ -267,6 +265,8 @@ public class CastJobActor extends AbstractActor {
             _doPush(event,new TargetSucceed(new PushTarget[]{t}));
         } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);
+            //此处发消息，而非直接调用_pushOne()，是为了防止大量连续的被过滤target引起过深的递归，从而导致栈溢出
+            self().tell(new PushOne(), self());
         }
         long time = System.currentTimeMillis() - start;
         state.userFilterTime += time;
@@ -312,9 +312,9 @@ public class CastJobActor extends AbstractActor {
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
         //提交成功才做总量计数
-        int all = 1;
+        int all = msg.targets.length;
         if (job.getAllCount() != null) {
-            all = job.getAllCount() + 1;
+            all = job.getAllCount() + msg.targets.length;
         }
         this.job.setAllCount(all);
         for (PushTarget t : msg.targets) {
@@ -330,6 +330,8 @@ public class CastJobActor extends AbstractActor {
                 logger.fatal("assert failed: the removed target is not specified target");
             }
             job.setLastUserId(t1.getUserId());
+        } else {
+            logger.fatal("assert failed: targets is empty");
         }
     }
     //------------------------------------------------------------------------------------------------------------------
@@ -562,6 +564,25 @@ public class CastJobActor extends AbstractActor {
             int failed = job.getFailedCount() + msg.failedCount;
             this.job.setFailedCount(failed);
         }
+    }
+    //----------------------------------------------------------------------------------------------------------
+    /**
+     * pusher已获得推送平台推送因流控失败的回执应答
+     */
+    static class PushRateLimit {
+        public final PushEvent event;
+        public PushRateLimit(PushEvent event) {
+            this.event = event;
+        }
+    }
+    private void handlePushRateLimit(PushRateLimit msg) {
+        logger.trace("call onPushRateLimit(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        boolean removed = state.submitedEvents.remove(msg.event);
+        if (!removed) {
+            logger.warn("assert failed: event not in submited list!");
+        }
+        msg.event.decRetryCount(); //因流控失败不算重试次数，此处递减用于抵消重试提交成功后的重试次数累加
+        state.retryEvents.add(msg.event);
     }
     //----------------------------------------------------------------------------------------------------------
     private static class PushOne {}

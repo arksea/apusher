@@ -42,14 +42,17 @@ public class PushClient implements IPushClient<String> {
     private final String PUSH_URL;
     private final ZoneOffset localZone = ZoneOffset.of("+8");
     private final RequestConfig requestConfig;
+    private final long BACKOFF_MIN = 1000;
+    private final long BACKOFF_MAX = 5000;
+    private long backoff = BACKOFF_MIN;
     public PushClient(String appId, String appKey) throws UnsupportedEncodingException {
         this.appId = appId;
         this.appKey = appKey;
         String nspCtx = "{\"ver\":\"1\", \"appId\":\"" + appId + "\"}";
         this.PUSH_URL = "https://api.push.hicloud.com/pushsend.do?nsp_ctx=" + URLEncoder.encode(nspCtx, "UTF-8");
         requestConfig = RequestConfig.custom()
-            .setSocketTimeout(1000)
-            .setConnectTimeout(1000)
+            .setSocketTimeout(3000)
+            .setConnectTimeout(3000)
             .build();
     }
 
@@ -110,6 +113,7 @@ public class PushClient implements IPushClient<String> {
 
     @Override
     public void push(String session, PushEvent event, IConnectionStatusListener connListener, IPushStatusListener statusListener) {
+        long start = System.currentTimeMillis();
         if (event.testEvent) {
             statusListener.onPushSucceed(event, event.tokens.length);
             return;
@@ -169,7 +173,7 @@ public class PushClient implements IPushClient<String> {
             }
             if (code == 503) { //系统级失败：流控
                 logger.warn("华为推送流控错误");
-                statusListener.onPushFailed(event, event.tokens.length);
+                statusListener.onRateLimit(event);
             } else if (code != 200) { //系统级失败：通讯错误
                 logger.warn("华为推送错误, statusCode={}", code);
                 statusListener.onPushFailed(event, event.tokens.length);
@@ -191,8 +195,21 @@ public class PushClient implements IPushClient<String> {
                     handleMessage(msgMap, body, event, statusListener);
                 }
             }
+            long time = System.currentTimeMillis() - start;
+            if (time > 1500) {
+                logger.warn("huawei push succeed, use time={}ms", time);
+            } else {
+                logger.info("huawei push succeed, use time={}ms", time);
+            }
+            if (code == 503) {
+                Thread.sleep(backoff); //遇到流控失败时进行退避延时
+                backoff = Math.min(backoff * 2, BACKOFF_MAX);
+            } else {
+                backoff = BACKOFF_MIN;
+            }
         } catch (Exception ex) {
-            logger.warn("huawei push failed", ex);
+            long time = System.currentTimeMillis() - start;
+            logger.warn("huawei push failed, time={}ms, reason: {}", time, ex.getMessage());
             statusListener.onPushFailed(event, event.tokens.length);
             connListener.onFailed();
         }
@@ -217,6 +234,7 @@ public class PushClient implements IPushClient<String> {
                     logger.debug("华为推送成功, body={}, tokens.length={}, illegal_tokens={}",
                         body, event.tokens.length, tokens.size());
                 }
+                logger.info("标记{}个无效Token： {}", tokens.size(), body);
                 for (String token : tokens) {
                     statusListener.handleInvalidToken(token);
                 }

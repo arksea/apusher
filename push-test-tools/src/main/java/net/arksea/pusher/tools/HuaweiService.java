@@ -118,6 +118,11 @@ public class HuaweiService {
                 }
 
                 @Override
+                public void onRateLimit(PushEvent event) {
+                    Platform.runLater(() -> ErrorDialog.show("推送失败: 流量控制"));
+                }
+
+                @Override
                 public void handleInvalidToken(String token) {
                 }
             });

@@ -56,4 +56,10 @@ public class PushEvent implements Serializable {
     public void incRetryCount() {
         this.retryCount++;
     }
+
+    public void decRetryCount() {
+        if (this.retryCount > 0) {
+            this.retryCount--;
+        }
+    }
 }
