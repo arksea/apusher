@@ -7,7 +7,6 @@ import javafx.scene.control.TextField;
 import net.arksea.pusher.IConnectionStatusListener;
 import net.arksea.pusher.IPushStatusListener;
 import net.arksea.pusher.PushEvent;
-import net.arksea.pusher.PushStatus;
 import net.arksea.pusher.apns.PushClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -122,22 +121,23 @@ public class ApnsService {
             },
             new IPushStatusListener() {
                 @Override
-                public void onComplete(PushEvent event, PushStatus status) {
-                    Platform.runLater(() -> close());
-                    switch (status) {
-                        case PUSH_FAILD:
-                            Platform.runLater(() -> ErrorDialog.show("推送失败"));
-                            break;
-                        case INVALID_TOKEN:
-                            Platform.runLater(() -> ErrorDialog.show("Token无效"));
-                            break;
-                        case PUSH_SUCCEED:
-                            logger.debug("推送成功");
-                            Platform.runLater(() -> pushSucceed());
-                            break;
-                        default:
-                            break;
-                    }
+                public void onPushSucceed(PushEvent event, int succeedCount) {
+                    logger.debug("推送成功");
+                    Platform.runLater(() -> pushSucceed());
+                }
+
+                @Override
+                public void onPushFailed(PushEvent event, int failedCount) {
+                    Platform.runLater(() -> ErrorDialog.show("推送失败"));
+                }
+
+                @Override
+                public void onRateLimit(PushEvent event) {
+                    Platform.runLater(() -> ErrorDialog.show("推送失败: 流量控制"));
+                }
+
+                @Override
+                public void handleInvalidToken(String token) {
                 }
             });
     }

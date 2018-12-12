@@ -159,7 +159,6 @@ public class PushServer extends AbstractActor {
     //CastJob
     private void addCastJob(AddCastJob msg, ServiceRequest request) {
         try {
-            logger.debug("addCastJob: {}", msg.job.getDescription());
             CastJob job = stat.castJobService.addCastJob(msg.job);
             PushResult<Long> result = new PushResult<>(0, job.getId());
             sender().tell(new ServiceResponse(result, request), self());
@@ -172,7 +171,6 @@ public class PushServer extends AbstractActor {
 
     private void addCastJobs(AddCastJobs msg, ServiceRequest request) {
         try {
-            logger.debug("addCastJobs: count={}", msg.jobs.size());
             int count = stat.castJobService.addCastJobs(msg.jobs);
             PushResult<Integer> result = new PushResult<>(0, count);
             sender().tell(new ServiceResponse(result, request), self());

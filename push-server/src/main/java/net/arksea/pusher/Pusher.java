@@ -26,7 +26,6 @@ public class Pusher implements IPusher {
     private final List<ActorRef> pusherList;
     private final List<ActorRef> pusherPoolList;
     private final int timeout = 1000;
-    private final int askAvailableTimeout = 100;
     private final ActorRefFactory actorRefFactory;
     private final Random random = new Random(System.currentTimeMillis());
     public <T> Pusher(String pusherName, int clientCount, String productId,
@@ -58,7 +57,7 @@ public class Pusher implements IPusher {
                     }
                 }
             }
-            Props props = new ScatterGatherFirstCompletedGroup(paths, Duration.create(askAvailableTimeout, TimeUnit.MILLISECONDS)).props();
+            Props props = new ScatterGatherFirstCompletedGroup(paths, Duration.create(PushActor.ASK_AVAILABLE_TIMEOUT, TimeUnit.MILLISECONDS)).props();
             ActorRef pool = actorRefFactory.actorOf(props);
             pusherPoolList.add(pool);
         }
@@ -74,10 +73,10 @@ public class Pusher implements IPusher {
      */
     public Future<Boolean> push(PushEvent event) {
         logger.trace("Pusher::push()");
-        Future<ActorRef> future = askAvailablePuseActor();
+        Future<PushActor.AvailableReply> future = askAvailablePuseActor();
         return future.flatMap(
-            mapper(pushActor ->
-                Patterns.ask(pushActor, event, timeout).mapTo(classTag(Boolean.class))
+            mapper(reply ->
+                Patterns.ask(reply.pushActor, event, timeout).mapTo(classTag(Boolean.class))
             ),actorRefFactory.dispatcher()
         );
     }
@@ -93,10 +92,10 @@ public class Pusher implements IPusher {
      * 获取第一个可用状态的pushActor
      * @return
      */
-    private Future<ActorRef> askAvailablePuseActor() {
-        final AvailableReply request = new AvailableReply();
+    private Future<PushActor.AvailableReply> askAvailablePuseActor() {
+        final PushActor.AvailableAsk request = new PushActor.AvailableAsk();
         int index = random.nextInt(pusherPoolList.size());
         ActorRef pool = pusherPoolList.get(index);
-        return Patterns.ask(pool, request, askAvailableTimeout).mapTo(classTag(ActorRef.class));
+        return Patterns.ask(pool, request, PushActor.ASK_AVAILABLE_TIMEOUT).mapTo(classTag(PushActor.AvailableReply.class));
     }
 }

@@ -1,10 +1,10 @@
 package net.arksea.pusher;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
 import akka.actor.Cancellable;
 import akka.actor.Props;
 import akka.japi.Creator;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.concurrent.duration.Duration;
@@ -32,7 +32,7 @@ public class PushActor<T> extends AbstractActor {
     @Override
     public Receive createReceive() {
         return receiveBuilder()
-            .match(AvailableReply.class, this::handleAvailableReply)
+            .match(AvailableAsk.class, this::handleAvailableAsk)
             .match(PushEvent.class,      this::handlePushEvent)
             .match(Ping.class,           this::handlePing)
             .match(Connect.class,        this::handleConnect)
@@ -99,19 +99,12 @@ public class PushActor<T> extends AbstractActor {
     }
     //------------------------------------------------------------------------------------
     private void handlePushEvent(PushEvent event) {
-        long start = System.currentTimeMillis();
         logger.trace("call handlePushEvent() start");
         if (isAvailable()) {
             sender().tell(true, self()); //返回状态放在PushClient.push前，防止因其是阻塞类型的实现而影响吞吐率，以及导致超时造成的重复提交
             state.pushClient.push(session, event, connStatusListener, state.pushStatusListener);
         } else {
             sender().tell(false, self());
-        }
-        long time = System.currentTimeMillis() - start;
-        if (time > 1500) {
-            logger.warn("handlePushEvent() use time={}ms", time);
-        } else {
-            logger.trace("call handlePushEvent() end, use time={}ms", time);
         }
     }
     //------------------------------------------------------------------------------------
@@ -131,9 +124,9 @@ public class PushActor<T> extends AbstractActor {
     }
 
     //------------------------------------------------------------------------------------
-    private void handleAvailableReply(AvailableReply msg) {
-        if (isAvailable()) {
-            sender().tell(self(), self());
+    private void handleAvailableAsk(AvailableAsk msg) {
+        if (isAvailable() && System.currentTimeMillis() - msg.time < ASK_AVAILABLE_TIMEOUT) {
+            sender().tell(new AvailableReply(self()), self());
         }
     }
     private boolean isAvailable() {
@@ -163,4 +156,21 @@ public class PushActor<T> extends AbstractActor {
         //重置连接的退避时间
         state.connectDelay = BACKOFF_MIN;
     }
+
+    public static final long ASK_AVAILABLE_TIMEOUT = 100; //ms
+    public static class AvailableAsk {
+        public final long time;
+        public AvailableAsk() {
+            time = System.currentTimeMillis();
+        }
+    }
+
+    public static class AvailableReply {
+        public final ActorRef pushActor;
+
+        public AvailableReply(ActorRef pushActor) {
+            this.pushActor = pushActor;
+        }
+    }
+
 }

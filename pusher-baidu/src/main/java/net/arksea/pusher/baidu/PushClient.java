@@ -41,7 +41,7 @@ public class PushClient implements IPushClient {
     @Override
     public void push(Object session, PushEvent event, IConnectionStatusListener connListener, IPushStatusListener statusListener) {
         if (event.testEvent) {
-            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+            statusListener.onPushSucceed(event, 1);
             return;
         }
         try {
@@ -61,22 +61,23 @@ public class PushClient implements IPushClient {
                 .addDeviceType(3);      //设置设备类型，deviceType => 1 for web, 2 for pc, 3 for android, 4 for ios, 5 for wp.
             PushMsgToSingleDeviceResponse response = baiduClient.pushMsgToSingleDevice(request);
             logger.debug("msgId="+response.getMsgId()+",sendTime="+response.getSendTime());
-            statusListener.onComplete(event, PushStatus.PUSH_SUCCEED);
+            statusListener.onPushSucceed(event, 1);
         } catch (PushClientException ex) {
             logger.warn("push failed: eventId={},topic={}", event.id, event.topic, ex);
-            statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+            statusListener.onPushFailed(event, 1);
             connListener.onFailed();
         } catch (PushServerException ex) {
             logger.warn("push failed: eventId={},topic={},errorCode={}", event.id, event.topic,
                 ex.getErrorCode(),ex);
             int code = ex.getErrorCode();
             if (code == 30605 || code == 30607 || code == 30608 || code == 30609) { //默认都作为INVALID_TOKEN处理
-                statusListener.onComplete(event, PushStatus.INVALID_TOKEN);
+                statusListener.onPushFailed(event, 1);
+                statusListener.handleInvalidToken(event.tokens[0]);
             } else {
-                statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+                statusListener.onPushFailed(event, 1);
             }
         } catch (Exception ex) {
-            statusListener.onComplete(event, PushStatus.PUSH_FAILD);
+            statusListener.onPushFailed(event, 1);
             connListener.onFailed();
             logger.error("Unknown Error", ex);
         }

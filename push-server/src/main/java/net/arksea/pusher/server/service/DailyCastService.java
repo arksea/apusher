@@ -90,6 +90,7 @@ public class DailyCastService {
 
     public DailyCast add(DailyCast cast) {
         if (cast.getId() == null) {
+            logger.info("Add DailyCast : {}", cast.getDescription());
             return dailyCastDao.save(cast);
         } else {
             throw new IllegalArgumentException("id can't be specified when add a DailyCast");
