@@ -2,7 +2,7 @@ package net.arksea.pusher.server.cast;
 
 import akka.actor.*;
 import akka.japi.Creator;
-import net.arksea.pusher.IPusherFactory;
+import net.arksea.pusher.IPushClientFactory;
 import net.arksea.pusher.entity.CastJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -21,7 +21,7 @@ public class CastJobManager extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobManager.class);
     private Cancellable timer;
     private CastJobManagerState state;
-    private IPusherFactory pusherFactory;
+    private IPushClientFactory pushClientFactory;
     class ProductInfo {
         public final String product;
         public int jobCount;
@@ -34,10 +34,10 @@ public class CastJobManager extends AbstractActor {
     public CastJobManager(CastJobManagerState state) {
         this.state = state;
         try {
-            Class clazz = Class.forName(state.pusherClass);
-            pusherFactory = (IPusherFactory)clazz.newInstance();
+            Class clazz = Class.forName(state.pushClientFactoryClass);
+            pushClientFactory = (IPushClientFactory)clazz.newInstance();
         } catch (Exception ex) {
-            throw new RuntimeException("Create PusherFactory failed:" + state.pusherClass, ex);
+            throw new RuntimeException("Create PusherFactory failed:" + state.pushClientFactoryClass, ex);
         }
     }
 
@@ -102,7 +102,7 @@ public class CastJobManager extends AbstractActor {
             try {
                 ITargetSource targetSource = state.targetSourceFactory.createTargetSource(job);
                 String jobName = "castjob-"+job.getId();
-                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, pusherFactory),jobName);
+                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, pushClientFactory),jobName);
                 context().watch(ref);
                 ++productInfo.jobCount;
                 state.jobMap.put(ref, productInfo);

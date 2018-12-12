@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.geometry.Insets?>
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.Tab?>
+<?import javafx.scene.control.TabPane?>
+<?import javafx.scene.control.TextArea?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.BorderPane?>
+<?import javafx.scene.layout.Pane?>
+<?import javafx.scene.text.Font?>
+
+<BorderPane maxHeight="-Infinity" maxWidth="-Infinity" minHeight="400.0" minWidth="600.0" prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/8.0.112" xmlns:fx="http://javafx.com/fxml/1" fx:controller="net.arksea.pusher.tools.TestToolMainController">
+   <center>
+      <TabPane prefHeight="200.0" prefWidth="200.0" tabClosingPolicy="UNAVAILABLE" BorderPane.alignment="CENTER">
+        <tabs>
+          <Tab text="ANPS2">
+               <content>
+                  <BorderPane prefHeight="200.0" prefWidth="200.0">
+                     <left>
+                        <Pane prefHeight="331.0" prefWidth="273.0" BorderPane.alignment="CENTER">
+                           <children>
+                              <TextField fx:id="textFieldApnsTopic" layoutX="55.0" layoutY="28.0" onInputMethodTextChanged="#onApnsPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <Label layoutX="10.0" layoutY="32.0" text="包名" />
+                              <Label layoutX="10.0" layoutY="72.0" text="Token" />
+                              <TextField fx:id="textFieldApnsToken" layoutX="55.0" layoutY="68.0" onInputMethodTextChanged="#onApnsPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <TextField fx:id="textFieldApnsCertFile" layoutX="55.0" layoutY="108.0" onInputMethodTextChanged="#onApnsPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <Label layoutX="10.0" layoutY="112.0" text="证书" />
+                              <Label layoutX="10.0" layoutY="152.0" text="密码" />
+                              <TextField fx:id="textFieldApnsCertPassword" layoutX="55.0" layoutY="148.0" onInputMethodTextChanged="#onApnsPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <Button fx:id="btnApnsPush" layoutX="13.0" layoutY="221.0" mnemonicParsing="false" onAction="#onBtnApnsPushClick" prefHeight="34.0" prefWidth="248.0" text="推送" />
+                           </children></Pane>
+                     </left>
+                     <center>
+                        <BorderPane prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                           <top>
+                              <Label text="Payload" BorderPane.alignment="CENTER">
+                                 <BorderPane.margin>
+                                    <Insets />
+                                 </BorderPane.margin>
+                                 <padding>
+                                    <Insets right="10.0" />
+                                 </padding></Label>
+                           </top>
+                           <center>
+                              <TextArea fx:id="textAreaApnsPayload" onInputMethodTextChanged="#onApnsPropsChanged" prefHeight="343.0" prefWidth="300.0" text="{&#10;  &quot;aps&quot;: {&#10;    &quot;alert&quot;: {&#10;      &quot;title&quot;: &quot;今日天气预报&quot;,&#10;      &quot;body&quot;: &quot;福州，今日雨，有时有中雨，15~19 ℃，空气质量良，出行记得带雨伞哦&quot;&#10;    }&#10;  },&#10;  &quot;ext&quot;: {&#10;    &quot;act&quot;: &quot;http://about:blank?cAct=101&quot;,&#10;  }&#10;}" wrapText="true" BorderPane.alignment="CENTER">
+                                 <font>
+                                    <Font name="Courier New" size="12.0" />
+                                 </font>
+                                 <BorderPane.margin>
+                                    <Insets bottom="10.0" right="15.0" />
+                                 </BorderPane.margin>
+                              </TextArea>
+                           </center>
+                        </BorderPane>
+                     </center>
+                  </BorderPane>
+               </content></Tab>
+          <Tab text="华为">
+               <content>
+                  <BorderPane prefHeight="200.0" prefWidth="200.0">
+                     <left>
+                        <Pane prefHeight="200.0" prefWidth="273.0" BorderPane.alignment="CENTER">
+                           <children>
+                              <Button fx:id="btnHuaweiPush" layoutX="13.0" layoutY="221.0" mnemonicParsing="false" onAction="#onBtnHuaweiPushClick" prefHeight="34.0" prefWidth="248.0" text="推送" />
+                              <Label layoutX="10.0" layoutY="32.0" text="AppID" />
+                              <Label layoutX="10.0" layoutY="72.0" text="AppKey" />
+                              <Label layoutX="10.0" layoutY="112.0" text="Token" />
+                              <TextField fx:id="textFieldHuaweiAppId" layoutX="55.0" layoutY="28.0" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <TextField fx:id="textFieldHuaweiAppKey" layoutX="55.0" layoutY="68.0" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                              <TextField fx:id="textFieldHuaweiToken" layoutX="55.0" layoutY="108.0" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="26.0" prefWidth="200.0" />
+                           </children>
+                        </Pane>
+                     </left>
+                     <center>
+                        <BorderPane prefHeight="200.0" prefWidth="200.0" BorderPane.alignment="CENTER">
+                           <top>
+                              <Label text="Payload" BorderPane.alignment="CENTER">
+                                 <padding>
+                                    <Insets right="10.0" />
+                                 </padding></Label>
+                           </top>
+                           <center>
+                              <TextArea fx:id="textAreaHuaweiPayload" onInputMethodTextChanged="#onHuaweiPropsChanged" prefHeight="200.0" prefWidth="200.0" text="{&#10;  &quot;hps&quot;: {&#10;    &quot;msg&quot;: {&#10;      &quot;type&quot;: 3,&#10;      &quot;body&quot;: {&#10;        &quot;content&quot;: &quot;十月金秋，满是丰收。那你收获的季节到来了吗？会有什么果实等着你去摘取呢？快看看10 月生肖运势，会带给你怎样的收获?&quot;,&#10;        &quot;title&quot;: &quot;十二生肖 2018 年 10 月运势&quot;&#10;      },&#10;      &quot;action&quot;: {&#10;        &quot;type&quot;: 3,&#10;        &quot;param&quot;: {&#10;          &quot;appPkgName&quot;: &quot;com.calendar.UI&quot;&#10;        }&#10;      }&#10;    },&#10;    &quot;ext&quot;: {&#10;      &quot;biTag&quot;: &quot;Trump&quot;&#10;    }&#10;  }&#10;}" BorderPane.alignment="CENTER">
+                                 <BorderPane.margin>
+                                    <Insets bottom="10.0" right="15.0" />
+                                 </BorderPane.margin></TextArea>
+                           </center>
+                        </BorderPane>
+                     </center>
+                  </BorderPane>
+               </content></Tab>
+        </tabs>
+      </TabPane>
+   </center>
+</BorderPane>

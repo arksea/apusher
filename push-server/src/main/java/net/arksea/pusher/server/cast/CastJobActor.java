@@ -7,10 +7,7 @@ import akka.dispatch.OnComplete;
 import akka.japi.Creator;
 import groovy.json.JsonSlurper;
 import net.arksea.base.FutureUtils;
-import net.arksea.pusher.IPushStatusListener;
-import net.arksea.pusher.IPusher;
-import net.arksea.pusher.IPusherFactory;
-import net.arksea.pusher.PushEvent;
+import net.arksea.pusher.*;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.server.Partition;
@@ -46,8 +43,9 @@ public class CastJobActor extends AbstractActor {
     private final UserFilter userFilter;
     private Set<String> testTargets = null;
     private final ITargetSource targetSource;
-    private IPusherFactory pusherFactory;
+    private IPushClientFactory pushClientFactory;
     private IPusher pusher;
+    private final int batchCount;
 
     private long submitFailedBeginTime;
     private final static JsonSlurper jsonSlurper = new JsonSlurper();
@@ -60,7 +58,9 @@ public class CastJobActor extends AbstractActor {
     private int noReplyEventCount; //首次进入任务结束流程时，未收到回复的推送事件数
 
     private CastJobActor(State state, JobResources beans, CastJob job, ITargetSource targetSource,
-                         UserFilter userFilter, IPusherFactory pusherFactory) {
+                         UserFilter userFilter, IPushClientFactory pushClientFactory) {
+        this.pushClientFactory = pushClientFactory;
+        this.batchCount = pushClientFactory.batchPushCount();
         this.state = state;
         this.beans = beans;
         this.job = job;
@@ -74,7 +74,6 @@ public class CastJobActor extends AbstractActor {
         }
         this.userFilter = userFilter;
         this.targetSource = targetSource;
-        this.pusherFactory = pusherFactory;
         this.tokenStatusListener = new PushStatusListener(self(), beans);
         this.pusherCount = targetSource.getPusherCount(job);
     }
@@ -87,7 +86,7 @@ public class CastJobActor extends AbstractActor {
             .match(RetrySucceed.class, this::handleRetrySucceed)
             .match(PushSucceed.class,  this::handlePushSucceed)
             .match(PushFailed.class,   this::handlePushFailed)
-            .match(PushInvalid.class,   this::handlePushInvalid)
+            .match(PushRateLimit.class,this::handlePushRateLimit)
             .match(NextPage.class,     this::handleNextPage)
             .match(PageTargets.class,  this::handlePageTargets)
             .match(JobFinished.class,  this::handleJobFinished)
@@ -114,7 +113,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
 
-    static Props props(JobResources beans, CastJob job, ITargetSource targetSource, IPusherFactory pusherFactory) throws Exception {
+    static Props props(JobResources beans, CastJob job, ITargetSource targetSource, IPushClientFactory pushClientFactory) throws Exception {
         String script = "";
         if (!StringUtils.isEmpty(job.getUserFilter())) {
             Map map =  (Map)jsonSlurper.parseText(job.getUserFilter());
@@ -125,7 +124,7 @@ public class CastJobActor extends AbstractActor {
         return Props.create(CastJobActor.class, new Creator<CastJobActor>() {
             @Override
             public CastJobActor create() throws Exception {
-                return new CastJobActor(state, beans, job, targetSource, userFilter, pusherFactory);
+                return new CastJobActor(state, beans, job, targetSource, userFilter, pushClientFactory);
             }
         });
     }
@@ -184,8 +183,9 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handleCastJobStartDelay(CastJobStartDelay msg) throws Exception {
+        logger.trace("call handleCastJobStartDelay()");
         String pusherName = "castjob-"+job.getId()+"-pusher";
-        this.pusher = pusherFactory.create(job.getProduct(), pusherName, pusherCount, context(), tokenStatusListener);
+        this.pusher = new Pusher(pusherName, pusherCount, job.getProduct(), pushClientFactory,tokenStatusListener,context());
         //延时3秒，防止PushActor刚刚建立连接，不在Avaliable状态
         scheduleOnce(3, TimeUnit.SECONDS, new PushOne());
     }
@@ -201,19 +201,55 @@ public class CastJobActor extends AbstractActor {
         } else if (state.targets == null || state.targets.isEmpty()) {
             delayNextPage(false);
         } else {
-            PushTarget t = state.targets.get(0);
-            _pushOneTarget(t);
+            if (this.batchCount > 1 && testTargets == null) {
+                _pushBatchTargets();
+            } else {
+                _pushOneTarget();
+            }
         }
     }
     private void _pushOneRetryEvent(PushEvent event) {
         _doPush(event, new RetrySucceed(event));
     }
-    private void _pushOneTarget(PushTarget t) {
+    //---------------------------------------------------------------------------------------------------
+    private void _pushBatchTargets() {
+        int size = state.targets.size();
+        int count = Math.min(this.batchCount, size);
+        if (size > count && size - count < 30) { //避免最后一批个数太少，与倒数第二批平均一下
+            count = size / 2;
+        }
+        List<String> tokens = new LinkedList<>();
+        List<PushTarget> targets = new LinkedList<>();
+        List<PushTarget> theBatch = new LinkedList<>();
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < count; ++i) {
+            PushTarget t = state.targets.get(i);
+            if (userFilter.doFilter(t)) {
+                tokens.add(state.targets.get(i).getToken());
+                targets.add(t);
+            }
+            theBatch.add(t);
+        }
+        long time = System.currentTimeMillis() - start;
+        state.userFilterTime += time;
+        PushTarget t = state.targets.get(0);
+        String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
+        PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
+            t.getProduct(),
+            tokens.toArray(new String[tokens.size()]),
+            payload,
+            job.getPayloadType(),
+            job.getExpiredTime().getTime());
+        _doPush(event,new TargetSucceed(theBatch.toArray(new PushTarget[theBatch.size()])));
+    }
+    //---------------------------------------------------------------------------------------------------
+    private void _pushOneTarget() {
+        PushTarget t = state.targets.get(0);
         String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
-        //每此尝试向一个Target推送，都会新建PushEvent
+        //每此尝试向一个/组Target推送，都会新建PushEvent
         //所以要保障不向submitedEvents重复add相同target的event：
-        //所以当一个Target尝试submit失败时，需要将add到submitedEvents中的event移除（handleSubmitPushEventFailed就是干这个的）
+        //所以当一个/组Target尝试submit失败时，需要将add到submitedEvents中的event移除（handleSubmitPushEventFailed就是干这个的）
         PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
             t.getProduct(),
             t.getToken(),
@@ -226,16 +262,20 @@ public class CastJobActor extends AbstractActor {
     private void _filterUser(PushTarget t, PushEvent event) {
         long start = System.currentTimeMillis();
         if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
-            _doPush(event,new TargetSucceed(t));
+            _doPush(event,new TargetSucceed(new PushTarget[]{t}));
         } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);
+            //此处发消息，而非直接调用_pushOne()，是为了防止大量连续的被过滤target引起过深的递归，从而导致栈溢出
+            self().tell(new PushOne(), self());
         }
         long time = System.currentTimeMillis() - start;
         state.userFilterTime += time;
     }
+    //---------------------------------------------------------------------------------------------------
     private void _doPush(PushEvent event, Object succeedMsg) {
         final long start = System.currentTimeMillis();
         state.submitedEvents.add(event);
+        logger.trace("state.submitedEvents.add(event): {}", event);
         pusher.push(event).onComplete(FutureUtils.completer(
             (ex, result) -> {
                 long time = System.currentTimeMillis() - start;
@@ -246,6 +286,7 @@ public class CastJobActor extends AbstractActor {
                         self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                     }
                 } else { //超时异常表示没有可用PushActor，其他异常表示提交失败
+                    logger.trace("push failed", ex);
                     self().tell(new SubmitPushEventFailed(event, time), ActorRef.noSender());
                 }
             }
@@ -257,34 +298,41 @@ public class CastJobActor extends AbstractActor {
      * targets列表中的的推送已正确提交的Pusher，可以开始下一轮推送
      */
     private static class TargetSucceed {
-        final PushTarget target;
+        final PushTarget[] targets;
         final long startTime;
 
-        private TargetSucceed(PushTarget target) {
-            this.target = target;
+        private TargetSucceed(PushTarget[] targets) {
+            this.targets = targets;
             this.startTime = System.currentTimeMillis();
         }
     }
 
     private void handleTargetSucceed(TargetSucceed msg) {
+        logger.trace("handleTargetSucceed");
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
         //提交成功才做总量计数
-        int all = 1;
+        int all = msg.targets.length;
         if (job.getAllCount() != null) {
-            all = job.getAllCount() + 1;
+            all = job.getAllCount() + msg.targets.length;
         }
         this.job.setAllCount(all);
-        targetSucceed(msg.target);
+        for (PushTarget t : msg.targets) {
+            targetSucceed(t);
+        }
+        _pushOne();
     }
     //完成一个target的处理（推送或不送）、设置job进度，并开始下个target的处理
     private void targetSucceed(PushTarget t) {
-        PushTarget t1 = state.targets.remove(0);
-        if (!t.getId().equals(t1.getId())) {
-            logger.fatal("assert failed: the removed target is not specified target");
+        if (state.targets.size() > 0) {
+            PushTarget t1 = state.targets.remove(0);
+            if (!t.getId().equals(t1.getId())) {
+                logger.fatal("assert failed: the removed target is not specified target");
+            }
+            job.setLastUserId(t1.getUserId());
+        } else {
+            logger.fatal("assert failed: targets is empty");
         }
-        job.setLastUserId(t1.getUserId());
-        _pushOne();
     }
     //------------------------------------------------------------------------------------------------------------------
     /**
@@ -320,6 +368,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handleSubmitPushEventFailed(SubmitPushEventFailed msg) {
+        logger.trace("call handleSubmitPushEventFailed(msg)");
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
@@ -372,6 +421,7 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handlePageTargets(PageTargets msg) {
+        logger.trace("handlePageTargets");
         state.targets = msg.targets;
         state.retryNextPageCount = 0;
         if (state.targets == null || state.targets.isEmpty()) {
@@ -424,6 +474,7 @@ public class CastJobActor extends AbstractActor {
     }
 
     private void handleJobFinished(JobFinished msg) {
+        logger.trace("handleJobFinished");
         if (jobStopDelaySeconds == 0) {
             noReplyEventCount = state.submitedEvents.size();
         }
@@ -450,6 +501,7 @@ public class CastJobActor extends AbstractActor {
                     }
                 }
                 state.submitedEvents.clear();
+                logger.trace("state.submitedEvents.clear()");
                 this.waitForReplySeconds = 0;
                 _pushOne();
             } else {
@@ -467,19 +519,22 @@ public class CastJobActor extends AbstractActor {
      */
     static class PushSucceed {
         public final PushEvent event;
-        public PushSucceed(PushEvent event) {
+        public final int succeedCount;
+        public PushSucceed(PushEvent event,int succeedCount) {
             this.event = event;
+            this.succeedCount = succeedCount;
         }
     }
     private void handlePushSucceed(PushSucceed msg) {
-        logger.trace("call onPushSucceed(msg), topic={}, token={}",msg.event.topic, msg.event.token);
+        logger.trace("call onPushSucceed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
         }
-        int succeed = 1;
+
+        int succeed = msg.succeedCount;
         if (job.getSucceedCount() != null) {
-            succeed = job.getSucceedCount() + 1;
+            succeed = job.getSucceedCount() + msg.succeedCount;
         }
         this.job.setSucceedCount(succeed);
     }
@@ -491,12 +546,14 @@ public class CastJobActor extends AbstractActor {
      */
     static class PushFailed {
         public final PushEvent event;
-        public PushFailed(PushEvent event) {
+        public final int failedCount;
+        public PushFailed(PushEvent event, int failedCount) {
             this.event = event;
+            this.failedCount = failedCount;
         }
     }
     private void handlePushFailed(PushFailed msg) {
-        logger.trace("call onPushFailed(msg), topic={}, token={}",msg.event.topic, msg.event.token);
+        logger.trace("call onPushFailed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list!");
@@ -504,26 +561,28 @@ public class CastJobActor extends AbstractActor {
         if (msg.event.getRetryCount() < MAX_RETRY_PUSH) {
             state.retryEvents.add(msg.event);
         } else {
-            int failed = job.getFailedCount() + 1;
+            int failed = job.getFailedCount() + msg.failedCount;
             this.job.setFailedCount(failed);
         }
     }
     //----------------------------------------------------------------------------------------------------------
     /**
-     * 用户状态异常造成的推送失败，不做推送成功与失败计数
+     * pusher已获得推送平台推送因流控失败的回执应答
      */
-    static class PushInvalid {
+    static class PushRateLimit {
         public final PushEvent event;
-        public PushInvalid(PushEvent event) {
+        public PushRateLimit(PushEvent event) {
             this.event = event;
         }
     }
-    public void handlePushInvalid(PushInvalid msg) {
-        logger.trace("call onPushValid(msg), topic={}, token={}",msg.event.topic, msg.event.token);
+    private void handlePushRateLimit(PushRateLimit msg) {
+        logger.trace("call onPushRateLimit(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
-            logger.warn("event not in submited list!");
+            logger.warn("assert failed: event not in submited list!");
         }
+        msg.event.decRetryCount(); //因流控失败不算重试次数，此处递减用于抵消重试提交成功后的重试次数累加
+        state.retryEvents.add(msg.event);
     }
     //----------------------------------------------------------------------------------------------------------
     private static class PushOne {}
