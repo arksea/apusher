@@ -21,6 +21,7 @@ import java.io.InputStreamReader;
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -43,7 +44,8 @@ public class PushClient implements IPushClient<String> {
     private final ZoneOffset localZone = ZoneOffset.of("+8");
     private final RequestConfig requestConfig;
     private final long BACKOFF_MIN = 1000;
-    private final long BACKOFF_MAX = 5000;
+    private final long BACKOFF_MAX = 8000;
+    private final ZoneOffset zone = ZoneOffset.of("+8");
     private long backoff = BACKOFF_MIN;
     public PushClient(String appId, String appKey) throws UnsupportedEncodingException {
         this.appId = appId;
@@ -82,6 +84,8 @@ public class PushClient implements IPushClient<String> {
                 int expiresIn = (Integer) map.get("expires_in");
                 accessTokenExpiresTime = System.currentTimeMillis() + expiresIn * 1000;
                 listener.connected(this.accessToken);
+                logger.info("Update access token succeed, expires time: {}",
+                    LocalDateTime.ofEpochSecond(accessTokenExpiresTime/1000,0,zone));
             } else {
                 logger.warn("Get huawei access token failed: code={}, result={}", code, body);
                 close(accessToken);
@@ -172,14 +176,15 @@ public class PushClient implements IPushClient<String> {
                 nspStatus = h.getValue();
             }
             if (code == 503) { //系统级失败：流控
-                logger.warn("华为推送流控错误");
+                logger.warn("华为推送流控错误, client={}, backoff={}", this, backoff);
                 statusListener.onRateLimit(event);
             } else if (code != 200) { //系统级失败：通讯错误
                 logger.warn("华为推送错误, statusCode={}", code);
                 statusListener.onPushFailed(event, event.tokens.length);
                 connListener.onFailed();
             } else if (nspStatus != null && !"0".equals(nspStatus)) { // 系统级失败
-                logger.warn("华为推送错误, nspStatus={}", nspStatus);
+                logger.warn("华为推送错误, nspStatus={}, token expires time:{} ", nspStatus
+                    , LocalDateTime.ofEpochSecond(accessTokenExpiresTime/1000,0,zone));
                 statusListener.onPushFailed(event, event.tokens.length);
                 connListener.onFailed();
             } else {
@@ -196,20 +201,20 @@ public class PushClient implements IPushClient<String> {
                 }
             }
             long time = System.currentTimeMillis() - start;
-            if (time > 1500) {
-                logger.warn("huawei push succeed, use time={}ms", time);
+            if (time > 2000) {
+                logger.info("huawei push succeed, use time={}ms, client={}", time, this);
             } else {
-                logger.info("huawei push succeed, use time={}ms", time);
+                logger.debug("huawei push succeed, use time={}ms, client={}", time, this);
             }
             if (code == 503) {
                 Thread.sleep(backoff); //遇到流控失败时进行退避延时
                 backoff = Math.min(backoff * 2, BACKOFF_MAX);
-            } else {
-                backoff = BACKOFF_MIN;
+            } else if (code == 200 && backoff > BACKOFF_MIN){
+                backoff = Math.max(BACKOFF_MIN, backoff - 1000);
             }
         } catch (Exception ex) {
             long time = System.currentTimeMillis() - start;
-            logger.warn("huawei push failed, time={}ms, reason: {}", time, ex.getMessage());
+            logger.warn("huawei push failed, time={}ms, reason: {}, client={}", time, ex.getMessage(), this);
             statusListener.onPushFailed(event, event.tokens.length);
             connListener.onFailed();
         }
