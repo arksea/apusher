@@ -5,7 +5,7 @@ import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.entity.UserDailyTimer;
 import net.arksea.pusher.server.repository.UserDailyTimerDao;
-import net.arksea.acache.CacheService;
+import net.arksea.acache.CacheAsker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -37,7 +37,7 @@ public class UserDailyTimerService {
     PayloadService payloadService;
 
     @Autowired
-    CacheService<PushTargetCacheFactory.PushTargetKey, PushTarget> pushTargetCacheService;
+    CacheAsker<PushTargetCacheFactory.PushTargetKey, PushTarget> pushTargetCacheService;
 
     public List<UserDailyTimer> getUserDailyTimers(String product, String userId) {
         return userDailyTimerDao.findByUserIdAndProduct(userId, product);

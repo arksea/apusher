@@ -3,13 +3,21 @@ apply plugin: 'java'
 
 description = """推送服务"""
 
+//将更新cache的最大延迟时间改为10分钟（默认为24小时）
+configurations.all {
+    resolutionStrategy {
+        cacheDynamicVersionsFor  30, 'seconds'
+        cacheChangingModulesFor  30, 'seconds'
+    }
+}
+
 dependencies {
     compile project (':pusher-apns')
     compile project (':pusher-huawei')
     compile project (':pusher-baidu')
     compile project (':push-client')
-    compile 'net.arksea:acache:0.8.0-SNAPSHOT'
-    compile ("net.arksea:aregister-client:0.4-SNAPSHOT")
+    compile 'net.arksea:acache:0.7.4-SNAPSHOT'
+    compile ("net.arksea:aregister-client:0.5-SNAPSHOT")
     compile 'net.arksea:httpclient-asker:1.0.3-SNAPSHOT'
     compile 'redis.clients:jedis:2.8.1'
     compile 'org.codehaus.groovy:groovy-all:2.4.4'

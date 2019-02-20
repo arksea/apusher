@@ -1,6 +1,7 @@
 package net.arksea.pusher.server.service;
 
 import akka.actor.ActorRef;
+import akka.actor.ActorSelection;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
 import akka.dispatch.Futures;
@@ -31,11 +32,30 @@ public class PushTargetCacheFactory {
     PushTargetDao pushTargetDao;
 
     @Bean(name = "pushTargetCache")
-    public CacheService<PushTargetKey, PushTarget> createCacheService() {
+    public CacheAsker<PushTargetKey, PushTarget> createCacheService() {
         PushTargetCacheSource source = new PushTargetCacheSource();
-        Props props = CacheActor.propsOfCachePool(24, source);
+        ICacheConfig<PushTargetKey> cfg = new ICacheConfig<PushTargetKey>() {
+            @Override
+            public String getCacheName() {
+                return "articleCache";
+            }
+            @Override
+            public long getIdleTimeout(PushTargetKey key) {
+                return 72000_000L; //20小时
+            }
+            @Override
+            public long getIdleCleanPeriod() {
+                return 3600_000L;//60分钟
+            }
+            @Override
+            public boolean waitForRespond() {
+                return true;
+            }
+        };
+        Props props = CacheActor.propsOfCachePool(24, cfg, source);
         ActorRef ref = system.actorOf(props, "pushTargetCache");
-        return new CacheService<PushTargetKey, PushTarget>(ref, system.dispatcher(), 5000);
+        ActorSelection sel = system.actorSelection(ref.path());
+        return new CacheAsker<PushTargetKey, PushTarget>(sel, system.dispatcher(), 5000);
     }
 
     class PushTargetCacheSource implements IDataSource<PushTargetKey, PushTarget> {
@@ -48,19 +68,6 @@ public class PushTargetCacheFactory {
             } else {
                 return Futures.successful(new TimedData<>(Long.MAX_VALUE, list.get(0)));
             }
-        }
-        @Override
-        public String getCacheName() {
-            return "pushTargetCache";
-        }
-        public boolean waitForRespond() {
-            return true;
-        }
-        public long getIdleTimeout(PushTargetKey key) {
-            return 72000_000L; //20小时
-        }
-        public long getIdleCleanPeriod() {
-            return 3600_000L;//60分钟
         }
     }
 

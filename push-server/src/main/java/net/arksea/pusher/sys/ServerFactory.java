@@ -3,6 +3,8 @@ package net.arksea.pusher.sys;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import com.typesafe.config.Config;
+import net.arksea.dsf.codes.ICodes;
+import net.arksea.dsf.codes.JavaSerializeCodes;
 import net.arksea.dsf.register.RegisterClient;
 import net.arksea.pusher.server.PushServer;
 import net.arksea.pusher.server.PushServerStat;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 /**
@@ -92,7 +95,9 @@ public class ServerFactory {
         if (registerClient != null) {
             int bindPort = systemConfig.getInt("akka.remote.netty.tcp.port");
             String regname = serviceRegisterName + "-v1-" + serverProfile;
-            registerClient.register(regname, bindPort, actorRef, system);
+            String hostAddrss = InetAddress.getLocalHost().getHostAddress();
+            ICodes codes = new JavaSerializeCodes();
+            registerClient.register(regname, hostAddrss, bindPort, actorRef, system, codes);
         }
         return actorRef;
     }
