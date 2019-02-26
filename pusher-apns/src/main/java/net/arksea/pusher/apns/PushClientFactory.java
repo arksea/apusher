@@ -20,6 +20,10 @@ import java.util.Properties;
 public class PushClientFactory implements IPushClientFactory<Session> {
     private static final Logger logger = LogManager.getLogger(PushClientFactory.class);
     private int index;
+    private InetAddress[] apnsAddrs;
+    public PushClientFactory() {
+
+    }
     @Override
     public IPushClient<Session> create(String name, String productId) throws Exception {
         Properties prop = new Properties();
@@ -32,13 +36,18 @@ public class PushClientFactory implements IPushClientFactory<Session> {
         keyStore.load(keyIn, pwdChars);
         KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
         keyManagerFactory.init(keyStore, pwdChars);
-        InetAddress[] array = InetAddress.getAllByName(PushClient.APNS_HOST);
-        logger.debug("APNS Server address count = " + array.length);
-        if (index >= array.length) {
-            index = 0;
-        }
-        String apnsAddr = array[index].getHostAddress();
-        ++index;
+        String apnsAddr = getApnsAddress();
         return new PushClient(name, apnsTopic, apnsAddr, keyManagerFactory);
+    }
+
+    private synchronized String getApnsAddress() throws Exception {
+        if (index < 1) {
+            apnsAddrs = InetAddress.getAllByName(PushClient.APNS_HOST);
+            index = apnsAddrs.length - 1;
+            logger.debug("APNS Server address count = " + apnsAddrs.length);
+        } else {
+            --index;
+        }
+        return apnsAddrs[index].getHostAddress();
     }
 }
