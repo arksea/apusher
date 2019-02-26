@@ -56,6 +56,7 @@ public class PushActor<T> extends AbstractActor {
             this.pushClient = pushClient;
             this.pushStatusListener = pushStatusListener;
             this.lastAvailableTime = System.currentTimeMillis();
+            this.connectDelay = BACKOFF_MIN;
         }
     }
 
@@ -81,14 +82,10 @@ public class PushActor<T> extends AbstractActor {
             state.pushClient.close(this.session);
             this.session = null;
             int backoff = state.connectDelay;
-            state.connectDelay = Math.max(BACKOFF_MIN, Math.min(backoff * 2, BACKOFF_MAX));
-            if (backoff == 0) {
-                connect();
-            } else {
-                delayConnectTimer = context().system().scheduler().scheduleOnce(
-                    Duration.create(backoff, TimeUnit.MILLISECONDS),
-                    self(), new Connect(), context().dispatcher(), self());
-            }
+            state.connectDelay =  Math.min(backoff * 2, BACKOFF_MAX);
+            delayConnectTimer = context().system().scheduler().scheduleOnce(
+                Duration.create(backoff, TimeUnit.MILLISECONDS),
+                self(), new Connect(), context().dispatcher(), self());
         }
     }
     //------------------------------------------------------------------------------------
