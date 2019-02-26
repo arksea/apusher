@@ -170,17 +170,22 @@ public class PushClient implements IPushClient<Session> {
 
     @Override
     public void ping(Session session, IConnectionStatusListener listener) {
-        if (apnsClient != null && session != null && apnsClient.isRunning() && !apnsClient.isFailed()) {
-            session.ping(new PingFrame(System.currentTimeMillis(), false),  new Callback() {
-                public void failed(Throwable ex) {
-                    logger.warn("ApnsHtt2Client session ping failed: {}", name, ex);
-                    listener.onFailed();
-                }
-                @Override
-                public void succeeded() {
-                    listener.onSucceed();
-                }
-            });
+        if (apnsClient != null && session != null) {
+            if (!apnsClient.isRunning() || apnsClient.isFailed()) {
+                listener.onFailed();
+            } else {
+                session.ping(new PingFrame(System.currentTimeMillis(), false), new Callback() {
+                    public void failed(Throwable ex) {
+                        logger.warn("ApnsHtt2Client session ping failed: {}", name, ex);
+                        listener.onFailed();
+                    }
+
+                    @Override
+                    public void succeeded() {
+                        listener.onSucceed();
+                    }
+                });
+            }
         }
     }
 
