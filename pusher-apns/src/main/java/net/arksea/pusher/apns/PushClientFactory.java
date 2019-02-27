@@ -42,7 +42,15 @@ public class PushClientFactory implements IPushClientFactory<Session> {
 
     private synchronized String getApnsAddress() throws Exception {
         if (index < 1) {
-            apnsAddrs = InetAddress.getAllByName(PushClient.APNS_HOST);
+            try {
+                apnsAddrs = InetAddress.getAllByName(PushClient.APNS_HOST);
+            } catch (Exception ex) {
+                if (apnsAddrs == null) {
+                    throw ex;
+                } else {
+                    logger.warn("Update host address list failed, use old list(size={}).", apnsAddrs.length, ex);
+                }
+            }
             index = apnsAddrs.length - 1;
             logger.debug("APNS Server address count = " + apnsAddrs.length);
         } else {
