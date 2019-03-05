@@ -21,6 +21,8 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
+import java.io.FileInputStream;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -41,22 +43,23 @@ public class PushClient implements IPushClient<Session> {
     private static final String URI_BASE = "https://" + APNS_HOST + ":" + APNS_PORT + "/3/device/";
 
     final private String name;
-    final private LifeCycle.Listener clientLifeCycleListener;
     final private String apnsServerIP;
-    final private KeyManagerFactory keyManagerFactory;
+    final private String keyPassword;
+    final public String keyFile;
     final private String apnsTopic;
     private HTTP2Client apnsClient;
+    private int connectCount;
 
-    public PushClient(String name, String apnsTopic, String apnsServerIP, KeyManagerFactory keyManagerFactory) {
+    public PushClient(String name, String apnsTopic, String apnsServerIP, String password, String keyFile) {
         this.name = name;
         this.apnsTopic = apnsTopic;
-        this.clientLifeCycleListener = new ClientLifeCycleListener(name);
         this.apnsServerIP = apnsServerIP;
-        this.keyManagerFactory = keyManagerFactory;
+        this.keyPassword = password;
+        this.keyFile = keyFile;
     }
 
     public static HTTP2Client createHttp2Client (LifeCycle.Listener lifeCycleListener) throws Exception {
-        return createHttp2Client(new QueuedThreadPool(), lifeCycleListener);
+        return createHttp2Client(new QueuedThreadPool(4,1), lifeCycleListener);
     }
 
     public static HTTP2Client createHttp2Client(final Executor executor, LifeCycle.Listener lifeCycleListener) throws Exception {
@@ -69,11 +72,11 @@ public class PushClient implements IPushClient<Session> {
 
     @Override
     public void connect(IConnectionStatusListener listener) throws Exception {
-        apnsClient = createHttp2Client(clientLifeCycleListener);
+        ++connectCount;
+        apnsClient = createHttp2Client(new ClientLifeCycleListener(name));
         Promise<Session> promise = new Promise<Session>() {
             @Override
             public void succeeded(Session session) {
-                logger.trace("ApnsHtt2Client connect succeed: {}", name);
                 listener.connected(session);
             }
             @Override
@@ -111,6 +114,12 @@ public class PushClient implements IPushClient<Session> {
         };
         final SslContextFactory sslContextFactory = new SslContextFactory(true);
         try {
+            final char[] pwdChars = keyPassword.toCharArray();
+            final KeyStore keyStore = KeyStore.getInstance("PKCS12");
+            final InputStream keyIn = new FileInputStream(keyFile);
+            keyStore.load(keyIn, pwdChars);
+            KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
+            keyManagerFactory.init(keyStore, pwdChars);
             final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance("SunX509");
             trustManagerFactory.init((KeyStore) null);
             TrustManager[] trustManagers = trustManagerFactory.getTrustManagers();
@@ -118,7 +127,8 @@ public class PushClient implements IPushClient<Session> {
             sslContext.init(keyManagerFactory.getKeyManagers(), trustManagers, null);
             sslContextFactory.setSslContext(sslContext);
             sslContextFactory.start();
-            apnsClient.connect(sslContextFactory, new InetSocketAddress(apnsServerIP, APNS_PORT), sessionListener, promise);
+            String addr = connectCount > 3 ? APNS_HOST : apnsServerIP;
+            apnsClient.connect(sslContextFactory, new InetSocketAddress(addr, APNS_PORT), sessionListener, promise);
         } catch (Exception ex) {
             promise.failed(ex);
         }
@@ -199,7 +209,11 @@ public class PushClient implements IPushClient<Session> {
     @Override
     public void close(Session session) {
         if (session != null) {
-            session.close(1, null, new Callback() {});
+            session.close(1, null, new Callback() {
+                public void failed(Throwable ex) {
+                    logger.warn("Close session failed: {}", name, ex);
+                }
+            });
         }
         if (apnsClient != null) {
             try {

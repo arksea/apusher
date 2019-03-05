@@ -21,7 +21,6 @@ public class CastJobManager extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobManager.class);
     private Cancellable timer;
     private CastJobManagerState state;
-    private IPushClientFactory pushClientFactory;
     class ProductInfo {
         public final String product;
         public int jobCount;
@@ -33,12 +32,6 @@ public class CastJobManager extends AbstractActor {
 
     public CastJobManager(CastJobManagerState state) {
         this.state = state;
-        try {
-            Class clazz = Class.forName(state.pushClientFactoryClass);
-            pushClientFactory = (IPushClientFactory)clazz.newInstance();
-        } catch (Exception ex) {
-            throw new RuntimeException("Create PusherFactory failed:" + state.pushClientFactoryClass, ex);
-        }
     }
 
     @Override
@@ -102,7 +95,7 @@ public class CastJobManager extends AbstractActor {
             try {
                 ITargetSource targetSource = state.targetSourceFactory.createTargetSource(job);
                 String jobName = "castjob-"+job.getId();
-                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, pushClientFactory),jobName);
+                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, state.pushClientFactory),jobName);
                 context().watch(ref);
                 ++productInfo.jobCount;
                 state.jobMap.put(ref, productInfo);
