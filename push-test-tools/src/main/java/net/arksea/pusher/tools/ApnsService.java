@@ -12,15 +12,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http2.api.Session;
 
-import javax.net.ssl.KeyManagerFactory;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.KeyStore;
 import java.util.Base64;
 import java.util.Properties;
 import java.util.UUID;
@@ -79,13 +76,7 @@ public class ApnsService {
         String pwd = textFieldApnsCertPassword.getText();
         String apnsTopic = textFieldApnsTopic.getText();
         String file = textFieldApnsCertFile.getText();
-        final InputStream keyIn = new FileInputStream(file);
-        final char[] pwdChars = pwd.toCharArray();
-        final KeyStore keyStore = KeyStore.getInstance("PKCS12");
-        keyStore.load(keyIn, pwdChars);
-        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
-        keyManagerFactory.init(keyStore, pwdChars);
-        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, keyManagerFactory);
+        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, pwd, file);
         pushClient.connect(new IConnectionStatusListener() {
             @Override
             public void onSucceed() {

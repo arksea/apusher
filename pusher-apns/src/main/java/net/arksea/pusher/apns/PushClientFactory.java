@@ -6,11 +6,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http2.api.Session;
 
-import javax.net.ssl.KeyManagerFactory;
 import java.io.FileInputStream;
-import java.io.InputStream;
 import java.net.InetAddress;
-import java.security.KeyStore;
 import java.util.Properties;
 
 /**
@@ -22,7 +19,6 @@ public class PushClientFactory implements IPushClientFactory<Session> {
     private int index;
     private InetAddress[] apnsAddrs;
     public PushClientFactory() {
-
     }
     @Override
     public IPushClient<Session> create(String name, String productId) throws Exception {
@@ -30,14 +26,9 @@ public class PushClientFactory implements IPushClientFactory<Session> {
         prop.load(new FileInputStream("./config/pusher-apns.properties"));
         String pwd = prop.getProperty("product."+productId+".password");
         String apnsTopic = prop.getProperty("product."+productId+".apns-topic");
-        final InputStream keyIn = new FileInputStream("./config/production-"+productId+".p12");
-        final char[] pwdChars = pwd.toCharArray();
-        final KeyStore keyStore = KeyStore.getInstance("PKCS12");
-        keyStore.load(keyIn, pwdChars);
-        KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
-        keyManagerFactory.init(keyStore, pwdChars);
+        String keyFile = "./config/production-"+productId+".p12";
         String apnsAddr = getApnsAddress();
-        return new PushClient(name, apnsTopic, apnsAddr, keyManagerFactory);
+        return new PushClient(name, apnsTopic, apnsAddr, pwd, keyFile);
     }
 
     private synchronized String getApnsAddress() throws Exception {
