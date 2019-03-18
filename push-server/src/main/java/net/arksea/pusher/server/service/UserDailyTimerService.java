@@ -1,5 +1,7 @@
 package net.arksea.pusher.server.service;
 
+import akka.actor.ActorSystem;
+import akka.dispatch.Futures;
 import akka.dispatch.Mapper;
 import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.entity.PushTarget;
@@ -7,18 +9,25 @@ import net.arksea.pusher.entity.UserDailyTimer;
 import net.arksea.pusher.server.repository.UserDailyTimerDao;
 import net.arksea.acache.CacheAsker;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import scala.concurrent.Await;
+import scala.concurrent.CanAwait;
+import scala.concurrent.ExecutionContext;
 import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
 
 import javax.transaction.Transactional;
 import java.time.LocalDate;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  *
@@ -35,6 +44,9 @@ public class UserDailyTimerService {
 
     @Autowired
     PayloadService payloadService;
+
+    @Autowired
+    ActorSystem system;
 
     @Autowired
     CacheAsker<PushTargetCacheFactory.PushTargetKey, PushTarget> pushTargetCacheService;
@@ -108,40 +120,45 @@ public class UserDailyTimerService {
     public Future<List<PushTarget>> findPartitionTop(int partition, String product,
                                                      int minuteOfDay, String payloadType, String fromUserId,
                                                      Map<String,String> payloadCache) {
-        List<UserDailyTimer> timerList;
-        if (fromUserId == null) {
-            timerList = userDailyTimerDao.findByPartition(partition, product, minuteOfDay, payloadType,
-                new PageRequest(0, PUSH_TARGET_PAGE_SIZE));
-        } else {
-            timerList = userDailyTimerDao.findByPartition(partition, product, minuteOfDay, payloadType, fromUserId,
-                new PageRequest(0, PUSH_TARGET_PAGE_SIZE));
-        }
-        if (timerList == null) {
-            return null;
-        }
-
-        List<Future<PushTarget>> targets = new LinkedList<>();
-        String dayOfWeek = Integer.toString(LocalDate.now().getDayOfWeek().getValue());
-        for (UserDailyTimer timer : timerList) {
-            if (!StringUtils.isEmpty(timer.getDays()) && timer.getDays().indexOf(dayOfWeek)==-1) {
-                continue;
+        return Futures.future(() -> {
+            List<UserDailyTimer> timerList;
+            if (fromUserId == null) {
+                timerList = userDailyTimerDao.findByPartition(partition, product, minuteOfDay, payloadType,
+                    new PageRequest(0, PUSH_TARGET_PAGE_SIZE));
+            } else {
+                timerList = userDailyTimerDao.findByPartition(partition, product, minuteOfDay, payloadType, fromUserId,
+                    new PageRequest(0, PUSH_TARGET_PAGE_SIZE));
             }
-            PushTargetCacheFactory.PushTargetKey key = new PushTargetCacheFactory.PushTargetKey(timer.getProduct(),timer.getUserId());
-            Future<PushTarget> s = pushTargetCacheService.get(key).map(
-                new Mapper<PushTarget, PushTarget>() {
-                    public PushTarget apply(PushTarget it) {
-                        try {
-                            //clone()是必须的操作，否则cache中的pushTarget对象将可能被修改
-                            return it == null ? null : it.clone();
-                        } catch (CloneNotSupportedException e) {
-                            throw new RuntimeException("clone PushTarget failed", e);
+            if (timerList == null) {
+                return null;
+            }
+            List<PushTarget> targets = new LinkedList<>();
+            String dayOfWeek = Integer.toString(LocalDate.now().getDayOfWeek().getValue());
+            for (UserDailyTimer timer : timerList) {
+                if (!StringUtils.isEmpty(timer.getDays()) && !timer.getDays().contains(dayOfWeek)) {
+                    continue;
+                }
+                PushTargetCacheFactory.PushTargetKey key = new PushTargetCacheFactory.PushTargetKey(timer.getProduct(),timer.getUserId());
+                Duration timeout = Duration.create(5, TimeUnit.SECONDS);
+                Future<PushTarget> f = pushTargetCacheService.get(key).map(
+                    new Mapper<PushTarget, PushTarget>() {
+                        public PushTarget apply(PushTarget it) {
+                            try {
+                                //clone()是必须的操作，否则cache中的pushTarget对象将可能被修改
+                                return  it == null ? null : it.clone();
+                            } catch (CloneNotSupportedException e) {
+                                throw new RuntimeException("clone PushTarget failed", e);
+                            }
                         }
-                    }
-                }, pushTargetCacheService.dispatcher);
-            Future<PushTarget> t = payloadService.fillPayload(s, timer.getPayloadUrl(), timer.getPayloadCacheKeys(), payloadCache);
-            targets.add(t);
-        }
-        return payloadService.sequence(targets);
+                    }, pushTargetCacheService.dispatcher);
+                PushTarget t = Await.result(f, timeout);
+                if (t != null) {
+                    payloadService.fillPayload(t, timer.getPayloadUrl(), timer.getPayloadCacheKeys(), payloadCache);
+                    targets.add(t);
+                }
+            }
+            return targets;
+        }, system.dispatcher());
     }
 
     public int cleanDeleted() {

@@ -98,7 +98,7 @@ public class PushClient implements IPushClient<Session> {
             @Override
             public boolean onIdleTimeout(Session session) {
                 logger.warn("ApnsHtt2Client session onIdleTimeout: {}", name);
-                return false; //不关闭连接
+                return true; //关闭连接
             }
             @Override
             public void onFailure(Session session, Throwable failure) {

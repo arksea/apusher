@@ -1,5 +1,6 @@
 package net.arksea.pusher.server.cast;
 
+import akka.actor.ActorSystem;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.server.repository.PushTargetDao;
 import net.arksea.pusher.server.service.DailyCastService;
@@ -33,6 +34,8 @@ public class TargetSourceFactory {
     DailyCastService dailyCastService;
     @Value("${push.pushTarget.maxPusherCount}")
     int maxPusherCount;
+    @Autowired
+    ActorSystem system;
 
     private UserDailyTimerTargetSource userDailyTimerTargetSource;
     private DailyCastTargetSource dailyCastTargetSource;

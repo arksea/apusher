@@ -1,26 +1,18 @@
 package net.arksea.pusher.server.service;
 
-import akka.dispatch.Futures;
-import akka.dispatch.Mapper;
 import net.arksea.pusher.entity.PushTarget;
-import net.arksea.httpclient.asker.FuturedHttpClient;
-import net.arksea.httpclient.asker.HttpAsk;
-import net.arksea.httpclient.asker.HttpResult;
+import net.arksea.pusher.sys.HttpService;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.NameValuePair;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
-import scala.concurrent.ExecutionContext;
-import scala.concurrent.Future;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
@@ -31,37 +23,15 @@ import java.util.Map;
 @Component
 public class PayloadService {
     private static Logger logger = LogManager.getLogger(PayloadService.class);
+
     @Autowired
-    FuturedHttpClient futuredHttpClient;
+    HttpService httpService;
 
-    public Future<List<PushTarget>> sequence(List<Future<PushTarget>> targets) {
-        ExecutionContext d = futuredHttpClient.system.dispatcher();
-        return Futures.sequence(targets, d).map(new Mapper<Iterable<PushTarget>, List<PushTarget>>() {
-            @Override
-            public List<PushTarget> apply(Iterable<PushTarget> p) {
-                List list = new LinkedList();
-                p.forEach(it -> {
-                    if (it != null && !StringUtils.isEmpty(it.getPayload())) {
-                        list.add(it);
-                    }
-                });
-                return list;
-            }
-        },d);
-    }
 
-    public Future<PushTarget> fillPayload(Future<PushTarget> targetFuture, String payloadUrl, String cacheKeyNames, Map<String,String> payloadCache) {
-        return targetFuture.flatMap(new Mapper<PushTarget,Future<PushTarget>>() {
-            public Future<PushTarget> apply(PushTarget target) {
-                return fillPayload(target, payloadUrl, cacheKeyNames, payloadCache);
-            }
-        },futuredHttpClient.system.dispatcher());
-    }
-
-    public Future<PushTarget> fillPayload(PushTarget target, String payloadUrl, String cacheKeyNames, Map<String,String> payloadCache) {
+    public void fillPayload(PushTarget target, String payloadUrl, String cacheKeyNames, Map<String,String> payloadCache) {
         try {
             if (target == null) {
-                return Futures.successful(null);
+                return;
             }
             final String cacheKey;
             if (StringUtils.isEmpty(cacheKeyNames)) {
@@ -70,41 +40,24 @@ public class PayloadService {
                 cacheKey = getCacheKey(cacheKeyNames, target);
                 if (StringUtils.isEmpty(cacheKey)) {
                     //有设置缓存key但target没有有效的key值则认为是无效target，不设置payload直接返回
-                    return Futures.successful(target);
+                    return;
                 } else {
                     String payload = payloadCache.get(cacheKey);
                     if (payload != null) {
                         target.setPayload(payload);
-                        return Futures.successful(target);
+                        return;
                     }
                 }
             }
             String url = fillUrlParams(payloadUrl, target);
             logger.trace("get payload from: {}",url);
-            HttpGet get = new HttpGet(url);
-            return futuredHttpClient.ask(new HttpAsk("request", get), 5000).map(
-                new Mapper<HttpResult, PushTarget>() {
-                    @Override
-                    public PushTarget apply(HttpResult ret) {
-                        if (ret.error == null) {
-                            int code = ret.response.getStatusLine().getStatusCode();
-                            if (code == 200) {
-                                target.setPayload(ret.value);
-                                if (!StringUtils.isEmpty(cacheKey)) {
-                                    if (StringUtils.isEmpty(ret.value)) {
-                                        payloadCache.put(cacheKey, "");
-                                    } else {
-                                        payloadCache.put(cacheKey, ret.value);
-                                    }
-                                }
-                            }
-                        }
-                        return target;
-                    }
-                }, futuredHttpClient.system.dispatcher());
+            String str = httpService.get(url);
+            target.setPayload(str);
+            if (!StringUtils.isEmpty(cacheKey)) {
+                payloadCache.put(cacheKey, str);
+            }
         } catch (Exception ex) {
-            logger.warn("获取payload失败，payloadUrl={},cacheKeys={}",payloadUrl, cacheKeyNames, ex);
-            return Futures.successful(target);
+            logger.warn("request payload failed，payloadUrl={},cacheKeys={}",payloadUrl, cacheKeyNames, ex);
         }
     }
 
@@ -144,6 +97,9 @@ public class PayloadService {
                         case "situsGroup":
                             urlsb.append(URLEncoder.encode(target.getSitusGroup(), "utf-8"));
                             break;
+                        case "partition":
+                            urlsb.append(URLEncoder.encode(target.getPartitions().toString(), "utf-8"));
+                            break;
                         default: //优先级D, todo: 支持target.getUserInfo()中的参数
                             break;
                     }
@@ -171,6 +127,9 @@ public class PayloadService {
                     break;
                 case "userId": //不支持以userId作为key，缓存无意义，而且量太大
                     value = "";
+                    break;
+                case "partition":
+                    value = target.getPartitions().toString();
                     break;
                 default: //优先级 D, todo: 支持target.getUserInfo()中的参数
                     value = "";

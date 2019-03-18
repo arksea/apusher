@@ -72,7 +72,7 @@ public class PushActor<T> extends AbstractActor {
         connStatusListener = new ConnectionStatusListener(self());
         delayConnect();
         pingTimer = context().system().scheduler().schedule(
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            Duration.create(state.connectDelay+PING_DELAY_SECONDS,TimeUnit.SECONDS),
             Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
             self(),new Ping(),context().dispatcher(),self());
     }

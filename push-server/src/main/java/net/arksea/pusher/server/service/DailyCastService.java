@@ -1,5 +1,7 @@
 package net.arksea.pusher.server.service;
 
+import akka.actor.ActorSystem;
+import akka.dispatch.Futures;
 import net.arksea.pusher.CastType;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.DailyCast;
@@ -35,6 +37,8 @@ public class DailyCastService {
     PayloadService payloadService;
     @Autowired
     PushTargetService pushTargetService;
+    @Autowired
+    ActorSystem system;
 
     public List<DailyCast> getNotCreated(ZonedDateTime date, int page, int pageSize) {
         long epochMill = date.toEpochSecond()*1000;
@@ -119,17 +123,16 @@ public class DailyCastService {
                                                      long dailyCastId,
                                                      String fromUserId,
                                                      Map<String,String> payloadCache) {
-        DailyCast dailyCast = dailyCastDao.findOne(dailyCastId);
-        if (dailyCast == null) {
-            logger.warn("the DailyCast not exists: {}", dailyCastId);
-            return null;
-        }
-        List<PushTarget> list = pushTargetService.findPartitionTop(partition, product, fromUserId);
-        List<Future<PushTarget>> targets = new LinkedList<>();
-        for (PushTarget target : list) {
-            Future<PushTarget> f = payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
-            targets.add(f);
-        }
-        return payloadService.sequence(targets);
+        return Futures.future(() -> {
+            DailyCast dailyCast = dailyCastDao.findOne(dailyCastId);
+            if (dailyCast == null) {
+                return null;
+            }
+            List<PushTarget> list = pushTargetService.findPartitionTop(partition, product, fromUserId);
+            for (PushTarget target : list) {
+                payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+            }
+            return list;
+        }, system.dispatcher());
     }
 }
