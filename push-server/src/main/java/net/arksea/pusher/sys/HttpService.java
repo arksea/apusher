@@ -1,6 +1,5 @@
 package net.arksea.pusher.sys;
 
-import net.arksea.httpclient.HttpClientHelper;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;

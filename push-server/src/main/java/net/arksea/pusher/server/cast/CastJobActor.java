@@ -31,7 +31,7 @@ public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
     private static final int JOB_FINISHE_DELAY_SECONDS = 5;
-    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 60;
+    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 25;
     private static final int JOB_START_DELAY_SECONDS = 45;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;

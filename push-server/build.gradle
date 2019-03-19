@@ -18,7 +18,6 @@ dependencies {
     compile project (':push-client')
     compile 'net.arksea:acache:0.7.4-SNAPSHOT'
     compile ("net.arksea:aregister-client:0.5-SNAPSHOT")
-    compile 'net.arksea:httpclient-asker:1.0.3-SNAPSHOT'
     compile 'redis.clients:jedis:2.8.1'
     compile 'org.codehaus.groovy:groovy-all:2.4.4'
 
