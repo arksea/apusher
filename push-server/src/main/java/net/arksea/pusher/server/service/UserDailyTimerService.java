@@ -3,21 +3,18 @@ package net.arksea.pusher.server.service;
 import akka.actor.ActorSystem;
 import akka.dispatch.Futures;
 import akka.dispatch.Mapper;
-import net.arksea.pusher.server.Partition;
+import net.arksea.acache.CacheAsker;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.entity.UserDailyTimer;
+import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.server.repository.UserDailyTimerDao;
-import net.arksea.acache.CacheAsker;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import scala.concurrent.Await;
-import scala.concurrent.CanAwait;
-import scala.concurrent.ExecutionContext;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
@@ -27,7 +24,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  *

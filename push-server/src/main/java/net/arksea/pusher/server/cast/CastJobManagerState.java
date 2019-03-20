@@ -23,6 +23,10 @@ public class CastJobManagerState {
     int maxJobsPerProduct;
     @Value("${push.castJobManager.pushClientFactoryClass}")
     String pushClientFactoryClass;
+
+    @Value("${push.cleanJobDays}")
+    int cleanJobDays;
+
     @Autowired
     public CastJobService castJobService;
     @Autowired

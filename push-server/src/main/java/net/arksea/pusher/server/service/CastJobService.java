@@ -153,7 +153,7 @@ public class CastJobService {
         castJobDao.resetRunningStatus();
     }
 
-    public int deleteOldCastJob(CastType castType, Timestamp time) {
-        return castJobDao.deleteOldCastJob(castType, time);
+    public int deleteOldCastJob(Timestamp time) {
+        return castJobDao.deleteOldCastJob(time);
     }
 }
