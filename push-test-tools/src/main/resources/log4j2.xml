@@ -9,7 +9,6 @@
             <Policies>
                 <TimeBasedTriggeringPolicy />
                 <SizeBasedTriggeringPolicy size="100 MB"/>
-                <CronTriggeringPolicy schedule="0 0 0 * * ?"/>
             </Policies>
             <DefaultRolloverStrategy max="10">
                 <Delete basePath="logs" maxDepth="2">
