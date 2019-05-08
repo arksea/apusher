@@ -3,6 +3,7 @@ package net.arksea.pusher.server.service;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.sys.HttpService;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.logging.log4j.LogManager;
@@ -49,12 +50,17 @@ public class PayloadService {
                     }
                 }
             }
-            String url = fillUrlParams(payloadUrl, target);
-            logger.trace("get payload from: {}",url);
-            String str = httpService.get(url);
-            target.setPayload(str);
+            Pair<String,String> pair = fillUrlParams(payloadUrl, target);
+            logger.trace("get payload from: {}",pair.getLeft());
+            String payload;
+            if (StringUtils.isEmpty(pair.getRight())) {
+                payload = httpService.get(pair.getLeft());
+            } else {
+                payload = httpService.post(pair.getLeft(), pair.getRight());
+            }
+            target.setPayload(payload);
             if (!StringUtils.isEmpty(cacheKey)) {
-                payloadCache.put(cacheKey, str);
+                payloadCache.put(cacheKey, payload);
             }
         } catch (Exception ex) {
             logger.warn("request payload failed，payloadUrl={},cacheKeys={}",payloadUrl, cacheKeyNames, ex);
@@ -68,13 +74,14 @@ public class PayloadService {
      * @param url
      * @return
      */
-    private String fillUrlParams(String url,PushTarget target) throws UnsupportedEncodingException {
+    private Pair<String,String> fillUrlParams(String url, PushTarget target) throws UnsupportedEncodingException {
         //解析URL，并填充参数
         String[] strs = StringUtils.split(url,'?');
         if (strs.length > 1) {
             List<NameValuePair> list = URLEncodedUtils.parse(strs[1], Charset.forName("UTF-8"));
             StringBuilder urlsb = new StringBuilder(strs[0]);
             urlsb.append('?');
+            String postBody = "";
             for (int i=0; i<list.size(); ++i) {
                 NameValuePair pair = list.get(i);
                 String n = pair.getName();
@@ -83,7 +90,11 @@ public class PayloadService {
                     urlsb.append('&');
                 }
                 urlsb.append(n).append('=');
-                if (StringUtils.isEmpty(v)) {
+                if ("_postUserInfo".equals(n)) {
+                    if("true".equals(v)) {
+                        postBody = target.getUserInfo();
+                    }
+                } else if (StringUtils.isEmpty(v)) {
                     switch(n) {
                         case "userId":
                             urlsb.append(URLEncoder.encode(target.getUserId(),"utf-8"));
@@ -107,9 +118,9 @@ public class PayloadService {
                     urlsb.append(URLEncoder.encode(v, "utf-8"));
                 }
             }
-            return urlsb.toString();
+            return Pair.of(urlsb.toString(), postBody);
         } else {
-            return url;
+            return Pair.of(url, "");
         }
     }
 
