@@ -30,6 +30,6 @@ public interface CastJobDao extends CrudRepository<CastJob, Long> {
     void resetRunningStatus();
 
     @Modifying
-    @Query("delete CastJob j where j.castType=?1 and j.startTime<?2")
-    int deleteOldCastJob(CastType castType, Timestamp time);
+    @Query("delete CastJob j where j.startTime<?1")
+    int deleteOldCastJob(Timestamp time);
 }

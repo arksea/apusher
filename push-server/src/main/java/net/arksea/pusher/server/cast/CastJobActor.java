@@ -31,7 +31,7 @@ public class CastJobActor extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobActor.class);
 
     private static final int JOB_FINISHE_DELAY_SECONDS = 5;
-    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 60;
+    private static final int MAX_WAIT_FOR_REPLY_SECONDS = 25;
     private static final int JOB_START_DELAY_SECONDS = 45;
     private static final int NEXT_PAGE_DELAY_MILLI = 10;
     private static final int MAX_RETRY_PUSH = 3;
@@ -159,7 +159,7 @@ public class CastJobActor extends AbstractActor {
         super.postStop();
         long jobUseTime = (System.currentTimeMillis() - state.jobStartTime)/1000 - jobStopDelaySeconds - jobStartDelaySeconds;
         Integer allCount = job.getAllCount();
-        logger.info("CastJob stopped: {}, pusherCount={}, allCount={}, failedCount={}, retryCount={}, noReplyEventCount={}, sumitedList={}, " +
+        logger.info("CastJob stopped : {}, pusherCount={}, allCount={}, failedCount={}, retryCount={}, noReplyEventCount={}, sumitedList={}, " +
                 "jobUseTime={}s, jobStopDelay={}s, nextPageDelay={}s, submitPushEventTime={}s,getTargetsTime={}s,clientAvailableDelay={}s,userFilterTime={}s",
             this.job.getId(),
             this.pusherCount,
@@ -371,7 +371,7 @@ public class CastJobActor extends AbstractActor {
         logger.trace("call handleSubmitPushEventFailed(msg)");
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
-            logger.warn("assert failed: event not in submited list!");
+            logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
         }
         long now = System.currentTimeMillis();
         if (submitFailedBeginTime <= 0) {
@@ -388,34 +388,41 @@ public class CastJobActor extends AbstractActor {
     //------------------------------------------------------------------------------------------------------------------
     private void handleNextPage(NextPage msg) {
         logger.trace("call nextPage(msg), partition={}", job.getLastPartition());
-        state.nextPageDelay += NEXT_PAGE_DELAY_MILLI;
-        if (msg.isFailedRetry) {
-            ++state.retryNextPageCount;
-        } else {
-            state.retryNextPageCount = 0;
-        }
-        if (state.retryNextPageCount < MAX_RETRY_NEXTPAGE) {
-            int partition = job.getLastPartition();
-            if (partition < Partition.MAX_USER_PARTITION) {
-                final long start = System.currentTimeMillis();
-                Future<List<PushTarget>> future = targetSource.nextPage(job, state.payloadCache);
-                future.onComplete(new OnComplete<List<PushTarget>>() {
-                    @Override
-                    public void onComplete(Throwable failure, List<PushTarget> targets) throws Throwable {
-                        long time = System.currentTimeMillis() - start;
-                        self().tell(new NextPageUseTime(time), ActorRef.noSender());
-                        if (failure == null && targets != null) {
-                            getPageTargetsSucceed(targets);
-                        } else {
-                            logger.error("get next page targets failed", failure);
-                            delayNextPage(true);
-                        }
-                    }
-                }, context().dispatcher());
+        try {
+            state.nextPageDelay += NEXT_PAGE_DELAY_MILLI;
+            if (msg.isFailedRetry) {
+                ++state.retryNextPageCount;
             } else {
-                delayFinishJob("succeed");
+                state.retryNextPageCount = 0;
             }
-        } else {
+            if (state.retryNextPageCount < MAX_RETRY_NEXTPAGE) {
+                int partition = job.getLastPartition();
+                if (partition < Partition.MAX_USER_PARTITION) {
+                    final long start = System.currentTimeMillis();
+                    Future<List<PushTarget>> future = targetSource.nextPage(job, state.payloadCache);
+                    future.onComplete(new OnComplete<List<PushTarget>>() {
+                        @Override
+                        public void onComplete(Throwable failure, List<PushTarget> targets) throws Throwable {
+                            long time = System.currentTimeMillis() - start;
+                            self().tell(new NextPageUseTime(time), ActorRef.noSender());
+                            if (failure == null && targets != null) {
+                                getPageTargetsSucceed(targets);
+                            } else {
+                                logger.error("get next page targets failed. (castjob:{})", failure, job.getId());
+                                delayNextPage(true);
+                            }
+                        }
+                    }, context().dispatcher());
+                } else {
+                    logger.info("CastJob finished: {}, cause no more targets.", job.getId());
+                    delayFinishJob("succeed");
+                }
+            } else {
+                logger.error("Get next page targets failed {} times, to finish the job. (castjob:{})", MAX_RETRY_NEXTPAGE, job.getId());
+                delayFinishJob("get next page targets failed");
+            }
+        } catch (Exception ex) {
+            logger.error("Get next page targets failed, to finish the job. (castjob:{})", job.getId(), ex);
             delayFinishJob("get next page targets failed");
         }
     }
@@ -529,7 +536,7 @@ public class CastJobActor extends AbstractActor {
         logger.trace("call onPushSucceed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
-            logger.warn("assert failed: event not in submited list!");
+            logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
         }
 
         int succeed = msg.succeedCount;
@@ -556,7 +563,7 @@ public class CastJobActor extends AbstractActor {
         logger.trace("call onPushFailed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
-            logger.warn("assert failed: event not in submited list!");
+            logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
         }
         if (msg.event.getRetryCount() < MAX_RETRY_PUSH) {
             state.retryEvents.add(msg.event);
@@ -579,7 +586,7 @@ public class CastJobActor extends AbstractActor {
         logger.trace("call onPushRateLimit(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
-            logger.warn("assert failed: event not in submited list!");
+            logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
         }
         msg.event.decRetryCount(); //因流控失败不算重试次数，此处递减用于抵消重试提交成功后的重试次数累加
         state.retryEvents.add(msg.event);

@@ -4,14 +4,12 @@ import akka.actor.AbstractActor;
 import akka.actor.Cancellable;
 import akka.actor.Props;
 import akka.japi.Creator;
-import net.arksea.pusher.CastType;
 import net.arksea.pusher.entity.UserDailyCast;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.Option;
 import scala.concurrent.duration.Duration;
 
-import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
@@ -27,27 +25,23 @@ public class UserDailyCastJobCreater extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(UserDailyCastJobCreater.class);
     private JobResources beans;
     private Cancellable timer;
-    private Cancellable jobCleanTimer;
-    private int cleanJobDays;
 
-    public UserDailyCastJobCreater(final JobResources beans, final int cleanJobDays) {
+    public UserDailyCastJobCreater(final JobResources beans) {
         this.beans = beans;
-        this.cleanJobDays = cleanJobDays;
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
             .match(CastJobPollingTimer.class,  this::onTimer)
-            .match(JobCleanTimer.class,  this::onJobCleanTimer)
             .build();
     }
 
-    public static Props props(final JobResources beans, final int cleanJobDays) {
+    public static Props props(final JobResources beans) {
         return Props.create(UserDailyCastJobCreater.class, new Creator<UserDailyCastJobCreater>() {
             @Override
             public UserDailyCastJobCreater create() throws Exception {
-                return new UserDailyCastJobCreater(beans,cleanJobDays);
+                return new UserDailyCastJobCreater(beans);
             }
         });
     }
@@ -59,12 +53,6 @@ public class UserDailyCastJobCreater extends AbstractActor {
             Duration.create(30, TimeUnit.SECONDS),
             Duration.create(1, TimeUnit.MINUTES),
             self(),new CastJobPollingTimer(),context().dispatcher(),self());
-        if (cleanJobDays > 0) {
-            jobCleanTimer = context().system().scheduler().schedule(
-                Duration.create(60, TimeUnit.SECONDS),
-                Duration.create(1000, TimeUnit.MINUTES),
-                self(),new JobCleanTimer(),context().dispatcher(),self());
-        }
         logger.info("Start UserDailyCastJobCreater");
     }
 
@@ -81,10 +69,6 @@ public class UserDailyCastJobCreater extends AbstractActor {
         if (timer != null) {
             timer.cancel();
             timer = null;
-        }
-        if (jobCleanTimer != null) {
-            jobCleanTimer.cancel();
-            jobCleanTimer = null;
         }
     }
 
@@ -110,15 +94,5 @@ public class UserDailyCastJobCreater extends AbstractActor {
         }
     }
 
-    private void onJobCleanTimer(JobCleanTimer msg) {
-        long now = System.currentTimeMillis();
-        long ms = cleanJobDays * 86_400_000;
-        Timestamp jobCleanTime = new Timestamp(now - ms);
-        int n = beans.castJobService.deleteOldCastJob(CastType.USER_DAILY_TIMER, jobCleanTime);
-        logger.info("delete USER_DAILY_TIMER CastJob that start time before {}, count={} ,use {} ms",
-             jobCleanTime.toString(),n, System.currentTimeMillis() - now);
-    }
-
     public static class CastJobPollingTimer {}
-    public static class JobCleanTimer{}
 }

@@ -16,10 +16,9 @@ import java.util.concurrent.TimeUnit;
  */
 public class PushActor<T> extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(PushActor.class);
-    private static final int BACKOFF_MAX = 300000; //重连退避
+    private static final int BACKOFF_MAX = 60_000; //重连退避
     private static final int BACKOFF_MIN = 3000;
     private static final int PING_DELAY_SECONDS = 5;
-    private int connectionFailedCount = 0;
     private IConnectionStatusListener connStatusListener;
     private final State<T> state;
     private T session;
@@ -48,11 +47,16 @@ public class PushActor<T> extends AbstractActor {
         int connectDelay;
         final String pushActorName;
         final IPushStatusListener pushStatusListener;
+        int reconnectCount; //连接（动作）持续失败次数，连接成功后被重置
+        int connectionFailedCount = 0; //连接状态（因通讯、ping等）连续失败次数，通讯或重连接成功后被重置
+        long lastAvailableTime;
 
         public State(String pushActorName, IPushClient<T> pushClient, IPushStatusListener pushStatusListener) {
             this.pushActorName = pushActorName;
             this.pushClient = pushClient;
             this.pushStatusListener = pushStatusListener;
+            this.lastAvailableTime = System.currentTimeMillis();
+            this.connectDelay = BACKOFF_MIN;
         }
     }
 
@@ -68,23 +72,28 @@ public class PushActor<T> extends AbstractActor {
         connStatusListener = new ConnectionStatusListener(self());
         delayConnect();
         pingTimer = context().system().scheduler().schedule(
-            Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
+            Duration.create(state.connectDelay+PING_DELAY_SECONDS,TimeUnit.SECONDS),
             Duration.create(PING_DELAY_SECONDS,TimeUnit.SECONDS),
             self(),new Ping(),context().dispatcher(),self());
     }
     private void delayConnect() throws Exception {
         //null判断用于防止多次重复调用reconnect()引起不必要的频繁重连（多次通讯失败的回调可能会集中在一个时间点发生）
         if (delayConnectTimer == null) {
-            state.pushClient.close(session);
-            int backoff = state.connectDelay;
-            state.connectDelay = Math.max(BACKOFF_MIN, Math.min(backoff * 2, BACKOFF_MAX));
-            if (backoff == 0) {
-                connect();
-            } else {
-                delayConnectTimer = context().system().scheduler().scheduleOnce(
-                    Duration.create(backoff, TimeUnit.MILLISECONDS),
-                    self(), new Connect(), context().dispatcher(), self());
+            if (state.reconnectCount > 1) {
+                logger.info("{} delay {}ms to reconnect. (count={})", state.pushActorName, state.connectDelay, state.reconnectCount +1);
             }
+            if (state.reconnectCount > 10) {
+                logger.error("Connect successive failed several times, please check network or apple certificate expires time({})", state.pushActorName);
+            }
+            if (this.session != null) {
+                state.pushClient.close(this.session);
+                this.session = null;
+            }
+            int backoff = state.connectDelay;
+            state.connectDelay =  Math.min(backoff * 2, BACKOFF_MAX);
+            delayConnectTimer = context().system().scheduler().scheduleOnce(
+                Duration.create(backoff, TimeUnit.MILLISECONDS),
+                self(), new Connect(), context().dispatcher(), self());
         }
     }
     //------------------------------------------------------------------------------------
@@ -120,17 +129,30 @@ public class PushActor<T> extends AbstractActor {
         connect();
     }
     private void connect() throws Exception {
+        ++state.reconnectCount;
+        state.lastAvailableTime = System.currentTimeMillis(); //防止too long at unavailable status误判
+        if (state.reconnectCount > 1) {
+            logger.info("{} reconnect. (count={})", state.pushActorName, state.reconnectCount);
+        }
         state.pushClient.connect(connStatusListener);
     }
 
     //------------------------------------------------------------------------------------
-    private void handleAvailableAsk(AvailableAsk msg) {
-        if (isAvailable() && System.currentTimeMillis() - msg.time < ASK_AVAILABLE_TIMEOUT) {
+    private void handleAvailableAsk(AvailableAsk msg) throws Exception {
+        long now = System.currentTimeMillis();
+        if (isAvailable() && now - msg.time < ASK_AVAILABLE_TIMEOUT) {
+            state.lastAvailableTime = now;
             sender().tell(new AvailableReply(self()), self());
+        } else if (now - state.lastAvailableTime > BACKOFF_MAX + 30_000) {
+            //容错处理： 重置不明原因引起的不响应的连接，是有用待观察
+            //加30秒是为了大于重置lastAvailableTime的周期，防止误判
+            state.lastAvailableTime = now;
+            delayConnect();
+            logger.warn("Delay reconnect because too long at unavailable status: {}", state.pushActorName);
         }
     }
     private boolean isAvailable() {
-        return state.pushClient.isAvailable(session);
+        return this.session != null && state.pushClient.isAvailable(session);
     }
     //------------------------------------------------------------------------------------
     private static class Ping {}
@@ -141,18 +163,20 @@ public class PushActor<T> extends AbstractActor {
     }
 
     private void handleConnectionFailed(ConnectionFailed msg) throws Exception {
-        if (++connectionFailedCount >= 3) {
-            connectionFailedCount = 0;
+        if (++state.connectionFailedCount >= 3) {
+            state.connectionFailedCount = 0;
             delayConnect();
         }
     }
 
     private void handleConnectionSucceed(ConnectionSucceed msg) throws Exception {
-        connectionFailedCount = 0;
+        state.connectionFailedCount = 0;
+        state.reconnectCount = 0;
     }
     //------------------------------------------------------------------------------------
     private void handleConnectSucceed(ConnectSucceed<T> msg) {
         this.session = msg.session;
+        state.connectionFailedCount = 0;
         //重置连接的退避时间
         state.connectDelay = BACKOFF_MIN;
     }

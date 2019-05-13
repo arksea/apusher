@@ -5,7 +5,7 @@ apply plugin: 'maven'
 description = """推送服务定义模块"""
 
 dependencies {
-    compile ("net.arksea:aregister-client:0.4-SNAPSHOT")
+    compile ("net.arksea:aregister-client:0.5-SNAPSHOT")
     compile  'org.hibernate:hibernate-entitymanager:4.3.5.Final'
     compile  'org.hibernate:hibernate-validator:5.0.3.Final'
 }

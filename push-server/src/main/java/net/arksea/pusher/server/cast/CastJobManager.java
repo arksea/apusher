@@ -2,13 +2,13 @@ package net.arksea.pusher.server.cast;
 
 import akka.actor.*;
 import akka.japi.Creator;
-import net.arksea.pusher.IPushClientFactory;
 import net.arksea.pusher.entity.CastJob;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.Option;
 import scala.concurrent.duration.Duration;
 
+import java.sql.Timestamp;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -21,7 +21,7 @@ public class CastJobManager extends AbstractActor {
     private final static Logger logger = LogManager.getLogger(CastJobManager.class);
     private Cancellable timer;
     private CastJobManagerState state;
-    private IPushClientFactory pushClientFactory;
+    private Cancellable jobCleanTimer;
     class ProductInfo {
         public final String product;
         public int jobCount;
@@ -33,19 +33,15 @@ public class CastJobManager extends AbstractActor {
 
     public CastJobManager(CastJobManagerState state) {
         this.state = state;
-        try {
-            Class clazz = Class.forName(state.pushClientFactoryClass);
-            pushClientFactory = (IPushClientFactory)clazz.newInstance();
-        } catch (Exception ex) {
-            throw new RuntimeException("Create PusherFactory failed:" + state.pushClientFactoryClass, ex);
-        }
     }
 
     @Override
     public Receive createReceive() {
         return receiveBuilder()
             .match(Terminated.class, this::onTerminated)
-            .match(CastJobPollingTimer.class,  this::onTimer).build();
+            .match(CastJobPollingTimer.class,  this::onTimer)
+            .match(JobCleanTimer.class,  this::onJobCleanTimer)
+            .build();
     }
 
     public static Props props(final CastJobManagerState state) {
@@ -65,6 +61,12 @@ public class CastJobManager extends AbstractActor {
             Duration.create(10, TimeUnit.SECONDS),
             Duration.create(1,TimeUnit.MINUTES),
             self(),new CastJobPollingTimer(),context().dispatcher(),self());
+        if (state.cleanJobDays > 0) {
+            jobCleanTimer = context().system().scheduler().schedule(
+                Duration.create(1, TimeUnit.MINUTES),
+                Duration.create(1000, TimeUnit.MINUTES),
+                self(),new JobCleanTimer(),context().dispatcher(),self());
+        }
         logger.info("Start CastJobManager");
     }
 
@@ -78,7 +80,14 @@ public class CastJobManager extends AbstractActor {
     public void postStop() throws Exception {
         super.postStop();
         logger.info("CastJobManager stopped");
-        timer.cancel();
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
+        if (jobCleanTimer != null) {
+            jobCleanTimer.cancel();
+            jobCleanTimer = null;
+        }
     }
 
     private void onTimer(CastJobPollingTimer msg) {
@@ -102,7 +111,7 @@ public class CastJobManager extends AbstractActor {
             try {
                 ITargetSource targetSource = state.targetSourceFactory.createTargetSource(job);
                 String jobName = "castjob-"+job.getId();
-                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, pushClientFactory),jobName);
+                ActorRef ref = context().actorOf(CastJobActor.props(state.jobResources, job, targetSource, state.pushClientFactory),jobName);
                 context().watch(ref);
                 ++productInfo.jobCount;
                 state.jobMap.put(ref, productInfo);
@@ -112,6 +121,15 @@ public class CastJobManager extends AbstractActor {
         }
     }
 
-    public static class CastJobPollingTimer {
+    private void onJobCleanTimer(JobCleanTimer msg) {
+        long now = System.currentTimeMillis();
+        long sec = state.cleanJobDays * 86_400; //毫秒用long会越界
+        Timestamp jobCleanTime = new Timestamp((now/1000 - sec) * 1000);
+        int n = state.castJobService.deleteOldCastJob(jobCleanTime);
+        logger.info("delete CastJob that start time before {}, count={} ,use {} ms",
+            jobCleanTime.toString(), n, System.currentTimeMillis() - now);
     }
+
+    public static class CastJobPollingTimer {}
+    public static class JobCleanTimer{}
 }

@@ -1,11 +1,13 @@
 package net.arksea.pusher.server.cast;
 
 import akka.actor.ActorRef;
+import net.arksea.pusher.IPushClientFactory;
 import net.arksea.pusher.server.service.CastJobService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -21,10 +23,25 @@ public class CastJobManagerState {
     int maxJobsPerProduct;
     @Value("${push.castJobManager.pushClientFactoryClass}")
     String pushClientFactoryClass;
+
+    @Value("${push.cleanJobDays}")
+    int cleanJobDays;
+
     @Autowired
     public CastJobService castJobService;
     @Autowired
     public TargetSourceFactory targetSourceFactory;
     @Autowired
     JobResources jobResources;
+    IPushClientFactory pushClientFactory;
+
+    @PostConstruct
+    public void init () {
+        try {
+            Class clazz = Class.forName(this.pushClientFactoryClass);
+            pushClientFactory = (IPushClientFactory)clazz.newInstance();
+        } catch (Exception ex) {
+            throw new RuntimeException("Create PusherFactory failed:" + this.pushClientFactoryClass, ex);
+        }
+    }
 }

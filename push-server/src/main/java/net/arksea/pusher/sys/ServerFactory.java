@@ -3,6 +3,8 @@ package net.arksea.pusher.sys;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import com.typesafe.config.Config;
+import net.arksea.dsf.codes.ICodes;
+import net.arksea.dsf.codes.JavaSerializeCodes;
 import net.arksea.dsf.register.RegisterClient;
 import net.arksea.pusher.server.PushServer;
 import net.arksea.pusher.server.PushServerStat;
@@ -15,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
+import java.net.InetAddress;
 import java.net.UnknownHostException;
 
 /**
@@ -33,9 +36,6 @@ public class ServerFactory {
     JobResources jobResources;
     @Autowired
     CastJobManagerState castJobManagerState;
-
-    @Value("${push.dailyCast.cleanJobDays}")
-    int dailyCastCleanJobDays;
 
     @Value("${push.pushTarget.autoClean}")
     boolean pushTargetAutoClean;
@@ -66,7 +66,7 @@ public class ServerFactory {
     @Bean(name = "userDailyCastCreater")
     public ActorRef createUserDailyCastJobManager() {
         if (userDailyCastEnabled) {
-            return system.actorOf(UserDailyCastJobCreater.props(jobResources, dailyCastCleanJobDays), "userDailyCastCreater");
+            return system.actorOf(UserDailyCastJobCreater.props(jobResources), "userDailyCastCreater");
         } else {
             return null;
         }
@@ -74,7 +74,7 @@ public class ServerFactory {
 
     @Bean(name = "dailyCastCreater")
     public ActorRef createDailyCastJobManager() {
-        return system.actorOf(DailyCastJobCreater.props(jobResources, dailyCastCleanJobDays),"dailyCastCreater");
+        return system.actorOf(DailyCastJobCreater.props(jobResources),"dailyCastCreater");
     }
 
     @Bean(name = "pushTargetManager")
@@ -92,7 +92,9 @@ public class ServerFactory {
         if (registerClient != null) {
             int bindPort = systemConfig.getInt("akka.remote.netty.tcp.port");
             String regname = serviceRegisterName + "-v1-" + serverProfile;
-            registerClient.register(regname, bindPort, actorRef, system);
+            String hostAddrss = InetAddress.getLocalHost().getHostAddress();
+            ICodes codes = new JavaSerializeCodes();
+            registerClient.register(regname, hostAddrss, bindPort, actorRef, system, codes);
         }
         return actorRef;
     }
