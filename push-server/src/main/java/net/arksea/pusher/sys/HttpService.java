@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 
+import static org.apache.http.entity.ContentType.APPLICATION_JSON;
+
 @Component
 public class HttpService {
     private static Logger logger = LogManager.getLogger(HttpService.class);
@@ -71,8 +73,7 @@ public class HttpService {
 
     public String post(String url, String body) throws Exception {
         HttpPost httpPost = new HttpPost(url);
-        StringEntity se = new StringEntity(body);
-        se.setContentType("application/json; charset=UTF-8");
+        StringEntity se = new StringEntity(body, APPLICATION_JSON);
         httpPost.setEntity(se);
         CloseableHttpResponse response = httpclient.execute(httpPost);
         try {
