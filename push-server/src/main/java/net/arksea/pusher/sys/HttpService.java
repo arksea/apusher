@@ -72,8 +72,7 @@ public class HttpService {
     public String post(String url, String body) throws Exception {
         HttpPost httpPost = new HttpPost(url);
         StringEntity se = new StringEntity(body);
-        se.setContentType("text/json");
-        se.setContentEncoding(new BasicHeader(HTTP.CONTENT_TYPE, "application/json"));
+        se.setContentType("application/json; charset=UTF-8");
         httpPost.setEntity(se);
         CloseableHttpResponse response = httpclient.execute(httpPost);
         try {
