@@ -80,7 +80,7 @@ public class DailyCastService {
         job.setDescription(cast.getDescription());
         job.setProduct(cast.getProduct());
         job.setCastTarget(cast.getId().toString());
-        job.setCastType(CastType.USER_DAILY);
+        job.setCastType(cast.getCastType());
         job.setTestTarget(cast.getTestTarget());
         job.setEnabled(true);
         job.setUserFilter(cast.getUserFilter());

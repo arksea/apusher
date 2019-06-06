@@ -1,5 +1,6 @@
 package net.arksea.pusher.entity;
 
+import net.arksea.pusher.CastType;
 import org.hibernate.validator.constraints.NotBlank;
 
 import javax.persistence.*;
@@ -19,6 +20,7 @@ public class DailyCast implements Serializable {
     private int minuteOfDay;            //当天0点开始的分钟数，
     private boolean enabled;            //定时器是否开启
     private String days;                //一个星期中哪些天需要推送，例如：  1,2,3,4,5表示周一到周五推送，周六周天不推送
+    private CastType castType;          //推送类型, 支持DAILY_BROAD 和 DAILY_ALL_SITUS两种类型
     private String payloadType;         //用户自行定义，可作为查询条件，查询指定type类型的任务
     private String payloadUrl;          //用于获取推送内容的接口URL,可以包含推送系统需要填写的参数，值留空，支持situs、situsGroup、userId及userInfo（json）对象中的字段
     private String payloadCacheKeys;    //逗号分隔的URL参数名，推送系统会以这里指出的key的值缓存返回的payload值，当参数值都相同时将使用缓存的结果
@@ -77,6 +79,17 @@ public class DailyCast implements Serializable {
 
     public void setDays(String days) {
         this.days = days;
+    }
+
+    //@Column(length = 16, nullable = false) todo: 表更新完可以改回来
+    @Column(columnDefinition = "VARCHAR(16) NOT NULL DEFAULT 'DAILY_BROAD'")
+    @Enumerated(EnumType.STRING)
+    public CastType getCastType() {
+        return castType;
+    }
+
+    public void setCastType(CastType castType) {
+        this.castType = castType;
     }
 
     @Column(length = 16, nullable = false)
