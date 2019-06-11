@@ -4,7 +4,8 @@ import akka.dispatch.Futures;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.server.Partition;
-import net.arksea.pusher.server.service.PushTargetService;
+import net.arksea.pusher.server.repository.PushTargetDao;
+import net.arksea.pusher.server.service.DailyCastService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import scala.concurrent.Future;
@@ -16,16 +17,23 @@ import java.util.Map;
  *
  * Created by xiaohaixing on 2017/11/10.
  */
-class AllSitusTargetSource implements ITargetSource {
-    private final static Logger logger = LogManager.getLogger(AllSitusTargetSource.class);
+class DailyAllSitusTargetSource implements ITargetSource {
+    private final static Logger logger = LogManager.getLogger(DailyAllSitusTargetSource.class);
     private final List<String> situsList;
-    private final PushTargetService pushTargetService;
+    private final DailyCastService service;
+    private final PushTargetDao pushTargetDao;
     private final int maxPusherCount;
 
-    public AllSitusTargetSource(PushTargetService pushTargetService, List<String> situsList, int maxPusherCount) {
-        this.pushTargetService = pushTargetService;
+    public DailyAllSitusTargetSource(DailyCastService service, List<String> situsList, PushTargetDao pushTargetDao, int maxPusherCount) {
+        this.service = service;
+        this.pushTargetDao = pushTargetDao;
         this.situsList = situsList;
         this.maxPusherCount = maxPusherCount;
+    }
+
+    @Override
+    public int maxPartition() {
+        return situsList.size();
     }
 
     @Override
@@ -34,9 +42,8 @@ class AllSitusTargetSource implements ITargetSource {
         String situs = situsList.get(situsIndex);
         if (situsIndex < situsList.size()) {
             String product = job.getProduct();
-            List<PushTarget> targets = pushTargetService.findSitusTop(product, job.getLastUserId(), situs);
-            logger.trace("call nextPage(job={}),return {} count PushTarget in situs {}({})",job.getId(), targets.size(), situsIndex, situs);
-            return Futures.successful(targets);
+            long dailyCastId = Long.parseLong(job.getCastTarget());
+            return service.findSitusTop(situs, job.getProduct(), dailyCastId, job.getLastUserId(), payloadCache);
         } else {
             logger.trace("call nextPage(job={}), situs {}({}) nomore PushTarget",job.getId(), situsIndex, situs);
             return Futures.successful(null);
@@ -44,7 +51,7 @@ class AllSitusTargetSource implements ITargetSource {
     }
 
     public int getPusherCount(CastJob job) {
-        long targetCount = pushTargetService.countByPartitionAndProduct(0, job.getProduct());
+        long targetCount = pushTargetDao.countByPartitionAndProduct(0, job.getProduct());
         int count =  (int)(targetCount * Partition.MAX_USER_PARTITION / pusherCountConst()) + 1;
         return Math.min(count, maxPusherCount);
     }

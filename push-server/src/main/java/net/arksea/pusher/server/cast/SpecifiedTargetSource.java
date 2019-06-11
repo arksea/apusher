@@ -29,16 +29,19 @@ public class SpecifiedTargetSource implements ITargetSource {
     }
 
     @Override
+    public int maxPartition() {
+        return 1;
+    }
+
+    @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
-        List<PushTarget> targets = new LinkedList<>();
         if (job.getLastPartition() == 0) {
+            List<PushTarget> targets = new LinkedList<>();
             int index = 0;
             if (job.getLastUserId() != null) {
                 index = users.indexOf(job.getLastUserId()) + 1;
             }
-
             ListIterator<String> it = users.listIterator(index);
-
             while (it.hasNext()) {
                 String userId = it.next();
                 List<PushTarget> ret = pushTargetService.findByProductAndUserId(job.getProduct(), userId);
@@ -48,10 +51,12 @@ public class SpecifiedTargetSource implements ITargetSource {
                     targets.add(ret.get(0));
                 }
             }
-            job.setLastPartition(Partition.MAX_USER_PARTITION - 1);
+            logger.trace("call nextPage(job={}),return {} cout PushTarget", job.getId(), targets.size());
+            return Futures.successful(targets);
+        } else {
+            logger.trace("call nextPage(job={}), nomore PushTarget",job.getId());
+            return Futures.successful(null);
         }
-        logger.trace("call nextPage(job={}),return {} cout PushTarget",job.getId(), targets.size());
-        return Futures.successful(targets);
     }
 
     public int getPusherCount(CastJob job) {

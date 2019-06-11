@@ -29,9 +29,14 @@ class SitusGroupCastTargetSource implements ITargetSource {
     }
 
     @Override
+    public int maxPartition() {
+        return Partition.MAX_USER_PARTITION;
+    }
+
+    @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
         int partition = job.getLastPartition();
-        if (partition < Partition.MAX_USER_PARTITION) {
+        if (partition < maxPartition()) {
             List<PushTarget> targets = pushTargetService.findSitusGroupTop(partition, job.getProduct(), job.getLastUserId(), situsGroups);
             logger.trace("call nextPage(job={}),return {} cout PushTarget in partition {}",job.getId(), targets.size(), partition);
             return Futures.successful(targets);

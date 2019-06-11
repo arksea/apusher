@@ -40,14 +40,14 @@ public class TargetSourceFactory {
     ActorSystem system;
 
     private UserDailyTimerTargetSource userDailyTimerTargetSource;
-    private DailyCastTargetSource dailyCastTargetSource;
+    private DailyBroadTargetSource dailyCastTargetSource;
     private PartitionalTargetSource partitionalTargetSource;
 
     @PostConstruct
     void init() {
         userDailyTimerTargetSource = new UserDailyTimerTargetSource(userDailyTimerService,maxPusherCount);
         partitionalTargetSource = new PartitionalTargetSource(pushTargetService,maxPusherCount);
-        dailyCastTargetSource = new DailyCastTargetSource(dailyCastService,pushTargetDao,maxPusherCount);
+        dailyCastTargetSource = new DailyBroadTargetSource(dailyCastService,pushTargetDao,maxPusherCount);
     }
 
     public ITargetSource createTargetSource(CastJob job) {
@@ -84,10 +84,10 @@ public class TargetSourceFactory {
     }
 
     private ITargetSource createDailyAllSitus(CastJob job) {
-        String fileName = "situs-" + job.getPayloadType() + "txt";
+        String fileName = "situs-" + job.getPayloadType() + ".txt";
         try {
             List<String> situs = Files.readAllLines(Paths.get("config", fileName));
-            return new AllSitusTargetSource(pushTargetService, situs, maxPusherCount);
+            return new DailyAllSitusTargetSource(dailyCastService, situs, pushTargetDao, maxPusherCount);
         } catch (Exception ex) {
             throw new RuntimeException("create AllSitusTargetSource failed, fileName="+fileName, ex);
         }

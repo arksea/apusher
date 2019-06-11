@@ -24,6 +24,12 @@ public class UserDailyTimerTargetSource implements ITargetSource {
         this.service = service;
         this.maxPusherCount = maxPusherCount;
     }
+
+    @Override
+    public int maxPartition() {
+        return Partition.MAX_USER_PARTITION;
+    }
+
     @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
         int partition = job.getLastPartition();
@@ -40,7 +46,7 @@ public class UserDailyTimerTargetSource implements ITargetSource {
     public boolean hasPushTargets(CastJob job) {
         int partition = job.getLastPartition();
         int minuteOfDay = Integer.parseInt(job.getCastTarget());
-        if (partition == 0) {
+        if (partition == 0) { //只需首次判断即可
             if (service.existsTimer(job.getProduct(),minuteOfDay,job.getPayloadType())) {
                 return true;
             }

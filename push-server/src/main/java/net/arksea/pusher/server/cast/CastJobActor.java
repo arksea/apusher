@@ -201,6 +201,7 @@ public class CastJobActor extends AbstractActor {
         } else if (state.targets == null || state.targets.isEmpty()) {
             delayNextPage(false);
         } else {
+            logger.debug("state.targets.size()={}", state.targets.size());
             if (this.batchCount > 1 && testTargets == null) {
                 _pushBatchTargets();
             } else {
@@ -234,6 +235,7 @@ public class CastJobActor extends AbstractActor {
         state.userFilterTime += time;
         PushTarget t = state.targets.get(0);
         String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
+        logger.debug("payload={}", payload);
         PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
             t.getProduct(),
             tokens.toArray(new String[tokens.size()]),
@@ -246,6 +248,7 @@ public class CastJobActor extends AbstractActor {
     private void _pushOneTarget() {
         PushTarget t = state.targets.get(0);
         String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
+        logger.debug("payload={}", payload);
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
         //每此尝试向一个/组Target推送，都会新建PushEvent
         //所以要保障不向submitedEvents重复add相同target的event：
@@ -397,7 +400,7 @@ public class CastJobActor extends AbstractActor {
             }
             if (state.retryNextPageCount < MAX_RETRY_NEXTPAGE) {
                 int partition = job.getLastPartition();
-                if (partition < Partition.MAX_USER_PARTITION) {
+                if (partition < targetSource.maxPartition()) {
                     final long start = System.currentTimeMillis();
                     Future<List<PushTarget>> future = targetSource.nextPage(job, state.payloadCache);
                     future.onComplete(new OnComplete<List<PushTarget>>() {
@@ -405,7 +408,7 @@ public class CastJobActor extends AbstractActor {
                         public void onComplete(Throwable failure, List<PushTarget> targets) throws Throwable {
                             long time = System.currentTimeMillis() - start;
                             self().tell(new NextPageUseTime(time), ActorRef.noSender());
-                            if (failure == null && targets != null) {
+                            if (failure == null && targets != null) { //target.size()==0也必须执行succeed操作，切到下一个partition
                                 getPageTargetsSucceed(targets);
                             } else {
                                 logger.error("get next page targets failed. (castjob:{})", failure, job.getId());

@@ -25,10 +25,16 @@ public class PartitionalTargetSource implements ITargetSource {
         this.pushTargetService = pushTargetService;
         this.maxPusherCount = maxPusherCount;
     }
+
+    @Override
+    public int maxPartition() {
+        return Partition.MAX_USER_PARTITION;
+    }
+
     @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
         int partition = job.getLastPartition();
-        if (partition < Partition.MAX_USER_PARTITION) {
+        if (partition < maxPartition()) {
             String product = job.getProduct();
             List<PushTarget> targets = pushTargetService.findPartitionTop(partition, product, job.getLastUserId());
             logger.trace("call nextPage(job={}),return {} cout PushTarget in partition {}",job.getId(), targets.size(), partition);

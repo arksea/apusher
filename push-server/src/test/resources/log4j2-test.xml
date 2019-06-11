@@ -8,13 +8,16 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="net.arksea.pusher" level="debug"/>
-        <Logger name="net.arksea.pusher.baidu" level="trace"/>
-        <Logger name="net.arksea.pusher.server.cast.UserDailyTimerTargetSource" level="debug"/>
-        <Logger name="net.arksea.pusher.server.service.UserDailyTimerService" level="debug"/>
+        <!--<Logger name="net.arksea.pusher" level="debug"/>-->
+        <!--<Logger name="net.arksea.pusher.baidu" level="trace"/>-->
+        <!--<Logger name="net.arksea.pusher.server.cast.UserDailyTimerTargetSource" level="debug"/>-->
+        <!--<Logger name="net.arksea.pusher.server.service.UserDailyTimerService" level="debug"/>-->
 
-        <Logger name="net.arksea.pusher.server.cast.DailyCastTargetSource" level="debug"/>
-        <Logger name="net.arksea.pusher.server.service.DailyCastService" level="debug"/>
+        <!--<Logger name="net.arksea.pusher.server.cast.DailyCastTargetSource" level="debug"/>-->
+        <!--<Logger name="net.arksea.pusher.server.service.DailyCastService" level="debug"/>-->
+
+        <Logger name="net.arksea.pusher.server.cast.CastJobActor" level="debug"/>
+        <Logger name="net.arksea.pusher.server.cast.AllSitusTargetSource" level="debug"/>
         <!--<Logger name="net.arksea.apns.pusher.ApnsHttp2Client" level="trace"/>-->
         <Root level="info">
             <AppenderRef ref="console"/>

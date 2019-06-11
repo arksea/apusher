@@ -17,23 +17,28 @@ import java.util.Map;
  *
  * Created by xiaohaixing on 2018/2/5.
  */
-public class DailyCastTargetSource implements ITargetSource {
-    private final static Logger logger = LogManager.getLogger(DailyCastTargetSource.class);
+public class DailyBroadTargetSource implements ITargetSource {
+    private final static Logger logger = LogManager.getLogger(DailyBroadTargetSource.class);
 
     private final DailyCastService service;
     private final PushTargetDao pushTargetDao;
     private final int maxPusherCount;
 
-    public DailyCastTargetSource(DailyCastService service,PushTargetDao pushTargetDao,int maxPusherCount) {
+    public DailyBroadTargetSource(DailyCastService service, PushTargetDao pushTargetDao, int maxPusherCount) {
         this.service = service;
         this.pushTargetDao = pushTargetDao;
         this.maxPusherCount = maxPusherCount;
     }
 
     @Override
+    public int maxPartition() {
+        return Partition.MAX_USER_PARTITION;
+    }
+
+    @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
         int partition = job.getLastPartition();
-        if (partition < Partition.MAX_USER_PARTITION) {
+        if (partition < maxPartition()) {
             long dailyCastId = Long.parseLong(job.getCastTarget());
             return service.findPartitionTop(partition, job.getProduct(), dailyCastId, job.getLastUserId(), payloadCache);
         } else {

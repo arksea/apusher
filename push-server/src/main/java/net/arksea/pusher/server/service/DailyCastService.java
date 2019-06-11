@@ -135,4 +135,22 @@ public class DailyCastService {
             return list;
         }, system.dispatcher());
     }
+
+    public Future<List<PushTarget>> findSitusTop(String situs,
+                                                     String product,
+                                                     long dailyCastId,
+                                                     String fromUserId,
+                                                     Map<String,String> payloadCache) {
+        return Futures.future(() -> {
+            DailyCast dailyCast = dailyCastDao.findOne(dailyCastId);
+            if (dailyCast == null) {
+                return null;
+            }
+            List<PushTarget> list = pushTargetService.findSitusTop(product, fromUserId, situs);
+            for (PushTarget target : list) {
+                payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+            }
+            return list;
+        }, system.dispatcher());
+    }
 }
