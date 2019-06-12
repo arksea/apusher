@@ -80,7 +80,7 @@ public class DailyCastService {
         job.setDescription(cast.getDescription());
         job.setProduct(cast.getProduct());
         job.setCastTarget(cast.getId().toString());
-        job.setCastType(CastType.USER_DAILY);
+        job.setCastType(cast.getCastType());
         job.setTestTarget(cast.getTestTarget());
         job.setEnabled(true);
         job.setUserFilter(cast.getUserFilter());
@@ -129,6 +129,24 @@ public class DailyCastService {
                 return null;
             }
             List<PushTarget> list = pushTargetService.findPartitionTop(partition, product, fromUserId);
+            for (PushTarget target : list) {
+                payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+            }
+            return list;
+        }, system.dispatcher());
+    }
+
+    public Future<List<PushTarget>> findSitusTop(String situs,
+                                                     String product,
+                                                     long dailyCastId,
+                                                     String fromUserId,
+                                                     Map<String,String> payloadCache) {
+        return Futures.future(() -> {
+            DailyCast dailyCast = dailyCastDao.findOne(dailyCastId);
+            if (dailyCast == null) {
+                return null;
+            }
+            List<PushTarget> list = pushTargetService.findSitusTop(product, fromUserId, situs);
             for (PushTarget target : list) {
                 payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
             }

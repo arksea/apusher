@@ -15,6 +15,7 @@ public interface ITargetSource {
     default int pusherCountConst() {
         return 100000;
     }
+    int maxPartition();
     Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache);
     default boolean hasPushTargets(CastJob job) {
         return true;

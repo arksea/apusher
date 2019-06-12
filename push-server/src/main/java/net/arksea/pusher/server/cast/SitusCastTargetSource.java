@@ -3,6 +3,7 @@ package net.arksea.pusher.server.cast;
 import akka.dispatch.Futures;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
+import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.server.service.PushTargetService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,10 +29,20 @@ class SitusCastTargetSource implements ITargetSource {
     }
 
     @Override
+    public int maxPartition() {
+        return 1;
+    }
+
+    @Override
     public Future<List<PushTarget>> nextPage(CastJob job, Map<String,String> payloadCache) {
-        List<PushTarget> targets = pushTargetService.findSitusTop(job.getProduct(), job.getLastUserId(), situs);
-        logger.trace("call nextPage(job={}),return {} cout PushTarget",job.getId(), targets.size());
-        return Futures.successful(targets);
+        if (job.getLastPartition() == 0) {
+            List<PushTarget> targets = pushTargetService.findSitusTop(job.getProduct(), job.getLastUserId(), situs);
+            logger.trace("call nextPage(job={}),return {} cout PushTarget", job.getId(), targets.size());
+            return Futures.successful(targets);
+        } else {
+            logger.trace("call nextPage(job={}), nomore PushTarget",job.getId());
+            return Futures.successful(null);
+        }
     }
 
     public int getPusherCount(CastJob job) {

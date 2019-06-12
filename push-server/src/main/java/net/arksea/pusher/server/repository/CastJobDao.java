@@ -22,7 +22,7 @@ public interface CastJobDao extends CrudRepository<CastJob, Long> {
     @Query("select j from CastJob j where j.startTime>=?2 and j.payloadType=?1 order by j.startTime desc")
     List<CastJob> getByPayloadtypeFrom(String payloadType, Timestamp from, Pageable pageable);
 
-    @Query("select j from CastJob j where j.startTime between :from and :to and j.finishedTime is null and j.running = 0 and j.expiredTime>:to order by j.startTime")
+    @Query("select j from CastJob j where j.startTime between :from and :to and j.finishedTime is null and j.enabled = 1 and j.running = 0 and j.expiredTime>:to order by j.startTime")
     List<CastJob> getOnTimeBetween(@Param("from") Timestamp from, @Param("to") Timestamp to, Pageable pageable);
 
     @Modifying
