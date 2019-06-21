@@ -28,7 +28,10 @@ public class TerminateHandler implements SignalHandler {
 
     public void registerHook() {
         Signal.handle(new Signal("TERM"), this);
-        Signal.handle(new Signal("USR2"), this);
+        String os = System.getProperty("os.name");
+        if(!os.toLowerCase().startsWith("win")){
+            Signal.handle(new Signal("USR2"), this);
+        }
     }
 
     public void waitForExist() {
