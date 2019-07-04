@@ -3,7 +3,6 @@ package net.arksea.pusher.server.service;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.sys.HttpService;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.utils.URLEncodedUtils;
 import org.apache.logging.log4j.LogManager;
@@ -50,23 +49,35 @@ public class PayloadService {
                     }
                 }
             }
-            Pair<String,String> pair = fillUrlParams(payloadUrl, target);
-            logger.trace("get payload from: {}",pair.getLeft());
-            String payload;
-            if (StringUtils.isEmpty(pair.getRight())) {
-                payload = httpService.get(pair.getLeft());
-            } else {
-                payload = httpService.post(pair.getLeft(), pair.getRight());
+            UrlParams params = fillUrlParams(payloadUrl, target);
+            logger.trace("request payload from: {}",params.url);
+            String payload = "";
+            if (!params.isPost) {
+                payload = httpService.get(params.url);
+                target.setPayload(payload);
+            } else if (StringUtils.isNotBlank(params.postBody)) {
+                payload = httpService.post(params.url, params.postBody);
+                target.setPayload(payload);
             }
-            target.setPayload(payload);
-            if (!StringUtils.isEmpty(cacheKey)) {
+            if (StringUtils.isNotBlank(cacheKey) && StringUtils.isNotBlank(payload)) {
                 payloadCache.put(cacheKey, payload);
             }
         } catch (Exception ex) {
-            logger.warn("request payload failed，payloadUrl={},cacheKeys={}",payloadUrl, cacheKeyNames, ex);
+            logger.warn("request payload failed，cacheKeys={}, payloadUrl={}",cacheKeyNames,payloadUrl,ex);
         }
     }
 
+    static class UrlParams {
+        final boolean isPost;
+        final String postBody;
+        final String url;
+
+        public UrlParams(boolean isPost, String postBody, String url) {
+            this.isPost = isPost;
+            this.postBody = postBody;
+            this.url = url;
+        }
+    }
     /**
      * 填充URL中的空参数，
      * 例如 http://tq.ifjing.com/api/v1/push/payload/today?userId=&situsGroup=&type=1&name=
@@ -74,13 +85,14 @@ public class PayloadService {
      * @param url
      * @return
      */
-    private Pair<String,String> fillUrlParams(String url, PushTarget target) throws UnsupportedEncodingException {
+    private UrlParams fillUrlParams(String url, PushTarget target) throws UnsupportedEncodingException {
         //解析URL，并填充参数
         String[] strs = StringUtils.split(url,'?');
         if (strs.length > 1) {
             List<NameValuePair> list = URLEncodedUtils.parse(strs[1], Charset.forName("UTF-8"));
             StringBuilder urlsb = new StringBuilder(strs[0]);
             urlsb.append('?');
+            boolean postUserInfo = false;
             String postBody = "";
             for (int i=0; i<list.size(); ++i) {
                 NameValuePair pair = list.get(i);
@@ -92,6 +104,7 @@ public class PayloadService {
                 urlsb.append(n).append('=');
                 if ("_postUserInfo".equals(n)) {
                     if("true".equals(v)) {
+                        postUserInfo = true;
                         postBody = target.getUserInfo();
                     }
                 } else if (StringUtils.isEmpty(v)) {
@@ -118,9 +131,9 @@ public class PayloadService {
                     urlsb.append(URLEncoder.encode(v, "utf-8"));
                 }
             }
-            return Pair.of(urlsb.toString(), postBody);
+            return new UrlParams(postUserInfo, postBody, urlsb.toString());
         } else {
-            return Pair.of(url, "");
+            return new UrlParams(false, "", url);
         }
     }
 

@@ -255,7 +255,7 @@ public class CastJobActor extends AbstractActor {
         //所以当一个/组Target尝试submit失败时，需要将add到submitedEvents中的event移除（handleSubmitPushEventFailed就是干这个的）
         PushEvent event = new PushEvent(job.getId()+":"+t.getUserId(),
             t.getProduct(),
-            t.getToken(),
+            new String[]{t.getToken()},
             payload,
             job.getPayloadType(),
             job.getExpiredTime().getTime(),

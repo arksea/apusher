@@ -1,4 +1,4 @@
-package net.arksea.pusher.huawei;
+package net.arksea.pusher.xinge;
 
 import net.arksea.pusher.IPushClient;
 import net.arksea.pusher.IPushClientFactory;
@@ -9,7 +9,7 @@ import java.util.Properties;
 
 /**
  *
- * Created by xiaohaixing on 2018/10/26.
+ * Created by xiaohaixing on 2019/06/21.
  */
 public class PushClientFactory implements IPushClientFactory<String> {
     public PushClientFactory() throws Exception {
@@ -20,7 +20,8 @@ public class PushClientFactory implements IPushClientFactory<String> {
         Properties prop = loadProperties();
         String appId = prop.getProperty("product."+productId+".appId");
         String appKey = prop.getProperty("product."+productId+".appKey");
-        return new PushClient(appId, appKey);
+        String token = prop.getProperty("product."+productId+".postmanToken");
+        return new PushClient(appId, appKey, token);
     }
 
     public int batchPushCount() {
@@ -39,7 +40,7 @@ public class PushClientFactory implements IPushClientFactory<String> {
 
     private Properties loadProperties() throws IOException {
         Properties prop = new Properties();
-        prop.load(new FileInputStream("./config/pusher-huawei.properties"));
+        prop.load(new FileInputStream("./config/pusher-xinge.properties"));
         return prop;
     }
 }
