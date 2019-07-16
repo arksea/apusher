@@ -113,10 +113,9 @@ public class PushClient implements IPushClient<Session> {
             }
         };
         final SslContextFactory sslContextFactory = new SslContextFactory(true);
-        try {
+        try (final InputStream keyIn = new FileInputStream(keyFile)) {
             final char[] pwdChars = keyPassword.toCharArray();
             final KeyStore keyStore = KeyStore.getInstance("PKCS12");
-            final InputStream keyIn = new FileInputStream(keyFile);
             keyStore.load(keyIn, pwdChars);
             KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
             keyManagerFactory.init(keyStore, pwdChars);
