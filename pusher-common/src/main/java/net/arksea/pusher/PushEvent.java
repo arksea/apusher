@@ -16,16 +16,6 @@ public class PushEvent implements Serializable {
     public final long createTime;
     public final boolean testEvent;
     private int retryCount = 0;
-    public PushEvent(String id, final String topic, final String token, final String payload, String payloadType, final long expiredTime) {
-        this.id = id;
-        this.topic = topic;
-        this.payload = payload;
-        this.payloadType = payloadType;
-        this.tokens = new String[] { token };
-        this.expiredTime = expiredTime;
-        this.testEvent = false;
-        this.createTime = System.currentTimeMillis();
-    }
 
     public PushEvent(String id, final String topic, final String[] tokens, final String payload, String payloadType, final long expiredTime) {
         this.id = id;
@@ -38,12 +28,12 @@ public class PushEvent implements Serializable {
         this.createTime = System.currentTimeMillis();
     }
 
-    public PushEvent(String id, final String topic, final String token, final String payload, String payloadType, final long expiredTime, final boolean testEvent) {
+    public PushEvent(String id, final String topic, final String[] tokens, final String payload, String payloadType, final long expiredTime, final boolean testEvent) {
         this.id = id;
         this.topic = topic;
         this.payload = payload;
         this.payloadType = payloadType;
-        this.tokens = new String[] { token };
+        this.tokens = tokens;
         this.expiredTime = expiredTime;
         this.testEvent = testEvent;
         this.createTime = System.currentTimeMillis();

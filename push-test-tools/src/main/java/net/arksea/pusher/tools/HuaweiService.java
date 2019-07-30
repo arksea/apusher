@@ -98,7 +98,8 @@ public class HuaweiService {
         String payload = textAreaPayload.getText();
         String token = textFieldHuaweiToken.getText();
         long expairTime = System.currentTimeMillis() + 3600_000 * 2;
-        PushEvent pushEvent = new PushEvent(UUID.randomUUID().toString(), "test", token, payload, "info", expairTime);
+        PushEvent pushEvent = new PushEvent(UUID.randomUUID().toString(), "test",
+            new String[]{token}, payload, "info", expairTime);
         pushClient.push(session, pushEvent,
             new IConnectionStatusListener() {
                 public void onSucceed() { logger.debug("onSucceed"); }

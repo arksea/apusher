@@ -15,7 +15,6 @@ import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Promise;
 import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
-import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
@@ -49,17 +48,15 @@ public class PushClient implements IPushClient<Session> {
     final private String apnsTopic;
     private HTTP2Client apnsClient;
     private int connectCount;
+    Executor executor;
 
-    public PushClient(String name, String apnsTopic, String apnsServerIP, String password, String keyFile) {
+    public PushClient(String name, String apnsTopic, String apnsServerIP, String password, String keyFile, Executor executor) {
         this.name = name;
         this.apnsTopic = apnsTopic;
         this.apnsServerIP = apnsServerIP;
         this.keyPassword = password;
         this.keyFile = keyFile;
-    }
-
-    public static HTTP2Client createHttp2Client (LifeCycle.Listener lifeCycleListener) throws Exception {
-        return createHttp2Client(new QueuedThreadPool(4,1), lifeCycleListener);
+        this.executor = executor;
     }
 
     public static HTTP2Client createHttp2Client(final Executor executor, LifeCycle.Listener lifeCycleListener) throws Exception {
@@ -73,7 +70,7 @@ public class PushClient implements IPushClient<Session> {
     @Override
     public void connect(IConnectionStatusListener listener) throws Exception {
         ++connectCount;
-        apnsClient = createHttp2Client(new ClientLifeCycleListener(name));
+        apnsClient = createHttp2Client(this.executor, new ClientLifeCycleListener(name));
         Promise<Session> promise = new Promise<Session>() {
             @Override
             public void succeeded(Session session) {
@@ -113,10 +110,9 @@ public class PushClient implements IPushClient<Session> {
             }
         };
         final SslContextFactory sslContextFactory = new SslContextFactory(true);
-        try {
+        try (final InputStream keyIn = new FileInputStream(keyFile)) {
             final char[] pwdChars = keyPassword.toCharArray();
             final KeyStore keyStore = KeyStore.getInstance("PKCS12");
-            final InputStream keyIn = new FileInputStream(keyFile);
             keyStore.load(keyIn, pwdChars);
             KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance("SunX509");
             keyManagerFactory.init(keyStore, pwdChars);

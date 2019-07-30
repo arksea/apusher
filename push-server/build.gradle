@@ -15,6 +15,7 @@ dependencies {
     compile project (':pusher-apns')
     compile project (':pusher-huawei')
     compile project (':pusher-baidu')
+    compile project (':pusher-xinge')
     compile project (':push-client')
     compile 'net.arksea:acache:0.7.4-SNAPSHOT'
     compile ("net.arksea:aregister-client:0.5-SNAPSHOT")
