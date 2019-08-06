@@ -27,4 +27,7 @@ public class JobResources {
 
     @Value("${push.resendNoReplyEvent}")
     boolean resendNoReplyEvent;
+
+    @Value("${push.terminateJobAfterSubmitFailedMinutes:2}")
+    int terminateJobAfterSubmitFailedMinutes;
 }

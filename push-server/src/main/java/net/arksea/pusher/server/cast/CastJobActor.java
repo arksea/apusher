@@ -140,9 +140,9 @@ public class CastJobActor extends AbstractActor {
     }
 
     @Override
-    public void preRestart(Throwable reason, Option<Object> message) throws Exception  {
+    public void preRestart(Throwable reason, Optional<Object> message) throws Exception  {
         super.preRestart(reason, message);
-        if (message.nonEmpty()) {
+        if (message.isPresent()) {
             Object obj = message.get();
             if (obj instanceof PushFailed) {
                 PushFailed msg = (PushFailed) obj;
@@ -382,7 +382,7 @@ public class CastJobActor extends AbstractActor {
         }
         state.clientAvailableDelay += msg.time;
         long minutes = (now - submitFailedBeginTime) / 60000;
-        if (minutes > 10) { //持续10分钟以上不能提交推送事件，则退出本次推送任务
+        if (minutes > beans.terminateJobAfterSubmitFailedMinutes) { //持续N分钟以上不能提交推送事件，则退出本次推送任务
             delayFinishJob("It is not possible to submit push events for more than " + minutes + " minutes");
         } else {
             _pushOne();
