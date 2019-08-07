@@ -1,6 +1,9 @@
 package net.arksea.pusher.apns;
 
-import net.arksea.pusher.*;
+import net.arksea.pusher.IConnectionStatusListener;
+import net.arksea.pusher.IPushClient;
+import net.arksea.pusher.IPushStatusListener;
+import net.arksea.pusher.PushEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http.HttpFields;
@@ -13,7 +16,6 @@ import org.eclipse.jetty.http2.client.HTTP2Client;
 import org.eclipse.jetty.http2.frames.*;
 import org.eclipse.jetty.util.Callback;
 import org.eclipse.jetty.util.Promise;
-import org.eclipse.jetty.util.component.LifeCycle;
 import org.eclipse.jetty.util.ssl.SslContextFactory;
 
 import javax.net.ssl.KeyManagerFactory;
@@ -27,7 +29,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.security.KeyStore;
 import java.util.UUID;
-import java.util.concurrent.Executor;
 
 /**
  *
@@ -35,7 +36,7 @@ import java.util.concurrent.Executor;
  */
 public class PushClient implements IPushClient<Session> {
     private final static Logger logger = LogManager.getLogger(PushClient.class);
-    private static final int MAX_STREAM_SIZE = 495;
+    private static final int MAX_STREAM_SIZE = 495; //apns每个session最多允许开启500个Stream，这里预留少量stream给ping使用
     public static final String APNS_HOST = "api.push.apple.com";
     private static final int APNS_PORT = 443;
     private static final int APNS_DEV_PORT = 2197;
@@ -46,31 +47,21 @@ public class PushClient implements IPushClient<Session> {
     final private String keyPassword;
     final public String keyFile;
     final private String apnsTopic;
-    private HTTP2Client apnsClient;
+    private final HTTP2Client apnsClient;
     private int connectCount;
-    Executor executor;
 
-    public PushClient(String name, String apnsTopic, String apnsServerIP, String password, String keyFile, Executor executor) {
+    public PushClient(String name, String apnsTopic, String apnsServerIP, String password, String keyFile, HTTP2Client apnsClient) {
         this.name = name;
         this.apnsTopic = apnsTopic;
         this.apnsServerIP = apnsServerIP;
         this.keyPassword = password;
         this.keyFile = keyFile;
-        this.executor = executor;
-    }
-
-    public static HTTP2Client createHttp2Client(final Executor executor, LifeCycle.Listener lifeCycleListener) throws Exception {
-        HTTP2Client http2Client = new HTTP2Client();
-        http2Client.addLifeCycleListener(lifeCycleListener);
-        http2Client.setExecutor(executor);
-        http2Client.start();
-        return http2Client;
+        this.apnsClient = apnsClient;
     }
 
     @Override
     public void connect(IConnectionStatusListener listener) throws Exception {
         ++connectCount;
-        apnsClient = createHttp2Client(this.executor, new ClientLifeCycleListener(name));
         Promise<Session> promise = new Promise<Session>() {
             @Override
             public void succeeded(Session session) {
@@ -99,8 +90,10 @@ public class PushClient implements IPushClient<Session> {
             }
             @Override
             public void onFailure(Session session, Throwable failure) {
-                logger.warn("ApnsHtt2Client session onFailure: {}", name, failure);
-                listener.reconnect();
+                if (!session.isClosed()) {
+                    logger.warn("ApnsHtt2Client session onFailure: {}", name, failure);
+                    listener.reconnect();
+                }
             }
             @Override
             public void onPing(Session session, PingFrame frame) {
@@ -176,7 +169,7 @@ public class PushClient implements IPushClient<Session> {
 
     @Override
     public void ping(Session session, IConnectionStatusListener listener) {
-        if (apnsClient != null && session != null) {
+        if (session != null) {
             if (!apnsClient.isRunning() || apnsClient.isFailed()) {
                 listener.onFailed();
             } else {
@@ -198,53 +191,17 @@ public class PushClient implements IPushClient<Session> {
     @Override
     public boolean isAvailable(Session session) {
         return apnsClient != null && session != null
-            && session.getStreams().size() < MAX_STREAM_SIZE
-            && apnsClient.isRunning() && !apnsClient.isFailed();
+            && session.getStreams().size() < MAX_STREAM_SIZE;
     }
 
     @Override
     public void close(Session session) {
         if (session != null) {
-            session.close(1, null, new Callback() {
+            session.close(0, null, new Callback() {
                 public void failed(Throwable ex) {
                     logger.warn("Close session failed: {}", name, ex);
                 }
             });
-        }
-        if (apnsClient != null) {
-            try {
-                apnsClient.stop();
-            } catch (Exception ex) {
-                logger.warn("Close apns client failed: {}", name, ex);
-            }
-            apnsClient = null;
-        }
-    }
-
-    static class ClientLifeCycleListener implements LifeCycle.Listener {
-        private final String pushActorName;
-        public ClientLifeCycleListener(String pushActorName) {
-            this.pushActorName = pushActorName;
-        }
-        @Override
-        public void lifeCycleStarting(LifeCycle event) {
-            logger.trace("ApnsHtt2Client lifeCycleStarting: {}", pushActorName);
-        }
-        @Override
-        public void lifeCycleStarted(LifeCycle event) {
-            logger.trace("ApnsHtt2Client lifeCycleStarted: {}", pushActorName);
-        }
-        @Override
-        public void lifeCycleFailure(LifeCycle event, Throwable cause) {
-            logger.warn("ApnsHtt2Client lifeCycleFailure: {}", pushActorName, cause);
-        }
-        @Override
-        public void lifeCycleStopping(LifeCycle event) {
-            logger.trace("ApnsHtt2Client lifeCycleStopping: {}", pushActorName);
-        }
-        @Override
-        public void lifeCycleStopped(LifeCycle event) {
-            logger.trace("ApnsHtt2Client lifeCycleStoped: {}", pushActorName);
         }
     }
 }

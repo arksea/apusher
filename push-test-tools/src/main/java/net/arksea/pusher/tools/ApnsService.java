@@ -11,6 +11,7 @@ import net.arksea.pusher.apns.PushClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http2.api.Session;
+import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -37,6 +38,7 @@ public class ApnsService {
     private PushClient pushClient;
     private Session _session;
     private boolean propsChanged;
+    QueuedThreadPool queuedThreadPool;
 
     public ApnsService(TextField textFieldApnsTopic,
             TextField textFieldApnsToken,
@@ -64,7 +66,10 @@ public class ApnsService {
                 String payload = new String(Base64.getDecoder().decode(payloadEncoded));
                 textAreaPayload.setText(payload);
             }
-        } catch (IOException ex) {
+            queuedThreadPool = new QueuedThreadPool(3,1);
+            queuedThreadPool.setDaemon(true);
+            queuedThreadPool.start();
+        } catch (Exception ex) {
             logger.warn("加载配置失败", ex);
         }
     }
@@ -76,7 +81,7 @@ public class ApnsService {
         String pwd = textFieldApnsCertPassword.getText();
         String apnsTopic = textFieldApnsTopic.getText();
         String file = textFieldApnsCertFile.getText();
-        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, pwd, file);
+        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, pwd, file, queuedThreadPool);
         pushClient.connect(new IConnectionStatusListener() {
             @Override
             public void onSucceed() {
