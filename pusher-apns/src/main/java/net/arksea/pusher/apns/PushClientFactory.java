@@ -5,11 +5,13 @@ import net.arksea.pusher.IPushClientFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http2.api.Session;
+import org.eclipse.jetty.http2.client.HTTP2Client;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 import java.io.FileInputStream;
 import java.net.InetAddress;
 import java.util.Properties;
+import java.util.concurrent.Executor;
 
 /**
  *
@@ -20,6 +22,7 @@ public class PushClientFactory implements IPushClientFactory<Session> {
     private int index;
     private InetAddress[] apnsAddrs;
     private QueuedThreadPool queuedThreadPool;
+    private HTTP2Client apnsClient;
 
     public PushClientFactory() {
         try (FileInputStream in = new FileInputStream("./config/pusher-apns.properties")){
@@ -33,9 +36,20 @@ public class PushClientFactory implements IPushClientFactory<Session> {
             queuedThreadPool.setName("push-client");
             queuedThreadPool.setDaemon(true);
             queuedThreadPool.start();
+            //HTTP2Client中的SelecterManager不能正确关闭，造成长期运行的进程出现越来越多的无用selectoer线程，所以不能每次任务够创建一个实例
+            apnsClient = createHttp2Client(queuedThreadPool);
+
         } catch (Exception ex) {
             throw new RuntimeException("init PushClientFactory failed", ex);
         }
+    }
+
+    public static HTTP2Client createHttp2Client(final Executor executor) throws Exception {
+        HTTP2Client http2Client = new HTTP2Client();
+        //http2Client.addLifeCycleListener(lifeCycleListener);
+        http2Client.setExecutor(executor);
+        http2Client.start();
+        return http2Client;
     }
 
     @Override
@@ -47,7 +61,7 @@ public class PushClientFactory implements IPushClientFactory<Session> {
             String apnsTopic = prop.getProperty("product." + productId + ".apns-topic");
             String keyFile = "./config/production-" + productId + ".p12";
             String apnsAddr = getApnsAddress();
-            return new PushClient(name, apnsTopic, apnsAddr, pwd, keyFile, queuedThreadPool);
+            return new PushClient(name, apnsTopic, apnsAddr, pwd, keyFile, apnsClient);
         }
     }
 
