@@ -11,9 +11,8 @@ import net.arksea.pusher.request.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import scala.Option;
-
 import java.util.List;
+import java.util.Optional;
 
 /**
  *
@@ -51,7 +50,7 @@ public class PushServer extends AbstractActor {
     }
 
     @Override
-    public void preRestart(Throwable ex, Option<Object> msg) throws Exception {
+    public void preRestart(Throwable ex, Optional<Object> msg) throws Exception {
         super.preRestart(ex, msg);
         logger.warn("PushServer restarting because exception", ex);
     }
@@ -110,6 +109,8 @@ public class PushServer extends AbstractActor {
         try {
             if (StringUtils.isEmpty(msg.situs) || StringUtils.isEmpty(msg.userId)) {
                 logger.debug("Situs or userId is empty: userId={}", msg.userId);
+                PushResult<Long> result = new PushResult<>(1);
+                sender().tell(new ServiceResponse(result, request, true), self());
                 return;
             }
             logger.debug("updateSitus: product={}, userId={}, userInfo={}, situs={}, situsGroup={}, location={}",
@@ -128,6 +129,8 @@ public class PushServer extends AbstractActor {
         try {
             if (StringUtils.isEmpty(msg.token) || StringUtils.isEmpty(msg.userId)) {
                 logger.debug("Token or userId is empty: userId={}", msg.userId);
+                PushResult<Long> result = new PushResult<>(1);
+                sender().tell(new ServiceResponse(result, request, true), self());
                 return;
             }
             logger.debug("updateToken: product={}, userId={}, token={}, userInfo={}",
