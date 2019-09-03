@@ -71,7 +71,7 @@ public class PushTargetService {
                     for (int i = 0; i < list.size(); ++i) {
                         PushTarget p = list.get(i);
                         pushTargetDao.delete(p);
-                        logger.error("删除重复Token：id={}, product={}, userId={}, token={}", p.getId(), product, p.getUserId(), token);
+                        logger.error("删除重复Token：id={}, product={}, userId={}, token={}, userInfo={}", p.getId(), product, p.getUserId(), token, p.getUserInfo());
                     }
                 }
             }
