@@ -28,10 +28,10 @@ public class PayloadService {
     HttpService httpService;
 
 
-    public void fillPayload(PushTarget target, String payloadUrl, String cacheKeyNames, Map<String,String> payloadCache) {
+    public boolean fillPayload(PushTarget target, String payloadUrl, String cacheKeyNames, Map<String,String> payloadCache) {
         try {
             if (target == null) {
-                return;
+                return false;
             }
             final String cacheKey;
             if (StringUtils.isEmpty(cacheKeyNames)) {
@@ -40,12 +40,14 @@ public class PayloadService {
                 cacheKey = getCacheKey(cacheKeyNames, target);
                 if (StringUtils.isEmpty(cacheKey)) {
                     //有设置缓存key但target没有有效的key值则认为是无效target，不设置payload直接返回
-                    return;
-                } else {
+                    return false;
+                } else if (payloadCache.containsKey(cacheKey)){
                     String payload = payloadCache.get(cacheKey);
-                    if (payload != null) {
+                    if (StringUtils.isBlank(payload)) {
+                        return false;
+                    } else {
                         target.setPayload(payload);
-                        return;
+                        return true;
                     }
                 }
             }
@@ -59,11 +61,13 @@ public class PayloadService {
                 payload = httpService.post(params.url, params.postBody);
                 target.setPayload(payload);
             }
-            if (StringUtils.isNotBlank(cacheKey) && StringUtils.isNotBlank(payload)) {
+            if (StringUtils.isNotBlank(cacheKey)) {
                 payloadCache.put(cacheKey, payload);
             }
+            return !StringUtils.isBlank(payload);
         } catch (Exception ex) {
             logger.warn("request payload failed，cacheKeys={}, payloadUrl={}",cacheKeyNames,payloadUrl,ex);
+            return false;
         }
     }
 

@@ -220,14 +220,12 @@ public class CastJobActor extends AbstractActor {
             count = size / 2;
         }
         List<String> tokens = new LinkedList<>();
-        List<PushTarget> targets = new LinkedList<>();
         List<PushTarget> theBatch = new LinkedList<>();
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; ++i) {
             PushTarget t = state.targets.get(i);
             if (userFilter.doFilter(t)) {
-                tokens.add(state.targets.get(i).getToken());
-                targets.add(t);
+                tokens.add(t.getToken());
             }
             theBatch.add(t);
         }
@@ -247,7 +245,7 @@ public class CastJobActor extends AbstractActor {
     //---------------------------------------------------------------------------------------------------
     private void _pushOneTarget() {
         PushTarget t = state.targets.get(0);
-        String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
+        String payload = StringUtils.isBlank(t.getPayload()) ? job.getPayload() : t.getPayload();
         logger.debug("payload={}", payload);
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
         //每此尝试向一个/组Target推送，都会新建PushEvent
@@ -264,7 +262,7 @@ public class CastJobActor extends AbstractActor {
     }
     private void _filterUser(PushTarget t, PushEvent event) {
         long start = System.currentTimeMillis();
-        if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
+        if (!StringUtils.isBlank(event.payload) && userFilter.doFilter(t)) {
             _doPush(event,new TargetSucceed(new PushTarget[]{t}));
         } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);

@@ -129,10 +129,14 @@ public class DailyCastService {
                 return null;
             }
             List<PushTarget> list = pushTargetService.findPartitionTop(partition, product, fromUserId);
+            List<PushTarget> fillted = new LinkedList<>();
             for (PushTarget target : list) {
-                payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+                boolean b = payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+                if (b) {
+                    fillted.add(target);
+                }
             }
-            return list;
+            return fillted;
         }, system.dispatcher());
     }
 
@@ -147,10 +151,14 @@ public class DailyCastService {
                 return null;
             }
             List<PushTarget> list = pushTargetService.findSitusTop(product, fromUserId, situs);
+            List<PushTarget> fillted = new LinkedList<>();
             for (PushTarget target : list) {
-                payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+                boolean b = payloadService.fillPayload(target, dailyCast.getPayloadUrl(), dailyCast.getPayloadCacheKeys(), payloadCache);
+                if (b) {
+                    fillted.add(target);
+                }
             }
-            return list;
+            return fillted;
         }, system.dispatcher());
     }
 }
