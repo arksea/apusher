@@ -82,36 +82,38 @@ jar {
 }
 
 //拷贝部署文件到指定目录
-task publish <<{
-    //拷贝前先删除部署目录
-    delete('publish/release')
-    copy{ //拷贝本项目打包的jar文件
-        from 'build/libs/'
-        into 'publish/release'
-    }
-    copy{ //拷贝依赖库
-        from configurations.runtime
-        into 'publish/release/lib'
-    }
-    copy{ //拷贝配置文件
-        from 'config/'
-        into 'publish/release/config'
-    }
-    copy{ //拷贝配置文件
-        from 'bin/'
-        into 'publish/release/bin'
-    }
-    copy{
-        from 'lib/alpn-boot-8.1.6.v20151105.jar'
-        into 'publish/release/lib'
-    }
+task publish {
+    dependsOn build
+    doLast {
+        //拷贝前先删除部署目录
+        delete('publish/release')
+        copy { //拷贝本项目打包的jar文件
+            from 'build/libs/'
+            into 'publish/release'
+        }
+        copy { //拷贝依赖库
+            from configurations.runtime
+            into 'publish/release/lib'
+        }
+        copy { //拷贝配置文件
+            from 'config/'
+            into 'publish/release/config'
+        }
+        copy { //拷贝配置文件
+            from 'bin/'
+            into 'publish/release/bin'
+        }
+        copy {
+            from 'lib/alpn-boot-8.1.6.v20151105.jar'
+            into 'publish/release/lib'
+        }
 
-    delete('publish/release/lib/akka-actor_2.11-2.4.8.jar')
-    delete('publish/release/lib/akka-cluster_2.11-2.4.8.jar')
-    delete('publish/release/lib/akka-protobuf_2.11-2.4.8.jar')
-    delete('publish/release/lib/akka-remote_2.11-2.4.8.jar')
-    delete('publish/release/lib/akka-slf4j_2.11-2.4.8.jar')
-    delete('publish/release/lib/scala-java8-compat_2.11-0.7.0.jar')
+        delete('publish/release/lib/akka-actor_2.11-2.4.8.jar')
+        delete('publish/release/lib/akka-cluster_2.11-2.4.8.jar')
+        delete('publish/release/lib/akka-protobuf_2.11-2.4.8.jar')
+        delete('publish/release/lib/akka-remote_2.11-2.4.8.jar')
+        delete('publish/release/lib/akka-slf4j_2.11-2.4.8.jar')
+        delete('publish/release/lib/scala-java8-compat_2.11-0.7.0.jar')
+    }
 }
-publish.dependsOn(build)
 

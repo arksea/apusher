@@ -534,7 +534,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushSucceed(PushSucceed msg) {
-        logger.trace("call onPushSucceed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushSucceed(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
@@ -561,7 +561,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushFailed(PushFailed msg) {
-        logger.trace("call onPushFailed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushFailed(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
@@ -584,7 +584,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushRateLimit(PushRateLimit msg) {
-        logger.trace("call onPushRateLimit(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushRateLimit(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
