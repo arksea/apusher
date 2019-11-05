@@ -20,14 +20,14 @@
 实际推送效果
 -----------
 
-#####● 速度
+##### ● 速度
 
 ![image](./images/push1.png)
 
 因为APNS的服务器在海外，在有重试（2次）的情况下仍有一定的失败率，
 IOS的推送速度受VPN带宽影响（10M），带宽更大速度应该可以更快
 
-#####● 稳定性
+##### ● 稳定性
 应用无故障连续运行半年
 
 添加任务(通过库表)
@@ -48,7 +48,7 @@ public class PushService {
 推送任务定义
 -------------------------
 
-#####● CastJob对象（部分主要字段）
+##### ● CastJob对象（部分主要字段）
 ```java
 public class CastJob implements Serializable {
     String description;    //任务描述
@@ -62,7 +62,7 @@ public class CastJob implements Serializable {
 }
 ```
 
-#####● CastType枚举
+##### ● CastType枚举
 
 ```java
 public enum CastType {
@@ -122,7 +122,7 @@ ITargetSource createTargetSource(CastJob job) {
 -----------------------------
 系统根据daily_cast表定义，每日自动在cast_job表生成推送任务
 
-#####● DailyCast对象（部分主要字段）
+##### ● DailyCast对象（部分主要字段）
 
 ```java
 public class DailyCast implements Serializable {
@@ -145,17 +145,17 @@ public class DailyCast implements Serializable {
 推送流程
 -------------
 
-######● CastJobActor创建相关类
+###### ● CastJobActor创建相关类
 CastJobActor负责执行推送任务，以下为系统根据cast_job自动创建CastJobActor相关类
 
 ![images](./images/4_cast_job_manager.png)
 
-######● 推送相关类图
+###### ● 推送相关类图
 
 ![images](./images/3_cast_job_actor.png)
 
-######● 推送流程序列图1_job_start
+###### ● 推送流程序列图1_job_start
 ![images](./images/1_job_start.png)
 
-######● 推送流程序列图2_do_push
+###### ● 推送流程序列图2_do_push
 ![images](./images/2_do_push.png)
