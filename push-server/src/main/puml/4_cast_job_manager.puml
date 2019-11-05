@@ -1,0 +1,15 @@
+@startuml
+
+interface ITargetSource
+ITargetSource <|-- PartitionalTargetSource
+ITargetSource <|-- DailyBroadTargetSource
+class TargetSourceFactory {
+  ITargetSource create(CastJob job)
+}
+CastJobManager -> TargetSourceFactory
+CastJobService <- CastJobManager
+IPushClientFactory <- CastJobActor
+CastJobManager *--> CastJobActor : create
+CastJobActor -> ITargetSource
+
+@enduml

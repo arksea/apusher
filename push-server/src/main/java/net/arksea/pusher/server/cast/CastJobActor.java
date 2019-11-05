@@ -10,11 +10,9 @@ import net.arksea.base.FutureUtils;
 import net.arksea.pusher.*;
 import net.arksea.pusher.entity.CastJob;
 import net.arksea.pusher.entity.PushTarget;
-import net.arksea.pusher.server.Partition;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import scala.Option;
 import scala.concurrent.Future;
 import scala.concurrent.duration.Duration;
 
@@ -82,7 +80,7 @@ public class CastJobActor extends AbstractActor {
     public Receive createReceive() {
         return receiveBuilder()
             .match(PushOne.class, this::handlePushOne)
-            .match(TargetSucceed.class,this::handleTargetSucceed)
+            .match(SubmitPushEventSucceed.class,this::handleSubmitPushEventSucceed)
             .match(RetrySucceed.class, this::handleRetrySucceed)
             .match(PushSucceed.class,  this::handlePushSucceed)
             .match(PushFailed.class,   this::handlePushFailed)
@@ -136,6 +134,7 @@ public class CastJobActor extends AbstractActor {
         logger.info("Start CastJob: {} after {} seconds", this.job.getId(), jobStartDelaySeconds);
         job.setRunning(true);
         beans.castJobService.saveCastJobByServer(job);
+        //一个随机的延时时间是为了让并发的job相对分散些，不至于集中于一个时间点
         scheduleOnce(jobStartDelaySeconds,TimeUnit.SECONDS,new CastJobStartDelay());
     }
 
@@ -220,14 +219,12 @@ public class CastJobActor extends AbstractActor {
             count = size / 2;
         }
         List<String> tokens = new LinkedList<>();
-        List<PushTarget> targets = new LinkedList<>();
         List<PushTarget> theBatch = new LinkedList<>();
         long start = System.currentTimeMillis();
         for (int i = 0; i < count; ++i) {
             PushTarget t = state.targets.get(i);
             if (userFilter.doFilter(t)) {
-                tokens.add(state.targets.get(i).getToken());
-                targets.add(t);
+                tokens.add(t.getToken());
             }
             theBatch.add(t);
         }
@@ -242,12 +239,12 @@ public class CastJobActor extends AbstractActor {
             payload,
             job.getPayloadType(),
             job.getExpiredTime().getTime());
-        _doPush(event,new TargetSucceed(theBatch.toArray(new PushTarget[theBatch.size()])));
+        _doPush(event,new SubmitPushEventSucceed(theBatch.toArray(new PushTarget[theBatch.size()])));
     }
     //---------------------------------------------------------------------------------------------------
     private void _pushOneTarget() {
         PushTarget t = state.targets.get(0);
-        String payload = StringUtils.isEmpty(t.getPayload()) ? job.getPayload() : t.getPayload();
+        String payload = StringUtils.isBlank(t.getPayload()) ? job.getPayload() : t.getPayload();
         logger.debug("payload={}", payload);
         boolean isTestEvent = testTargets != null && !testTargets.contains(t.getUserId());
         //每此尝试向一个/组Target推送，都会新建PushEvent
@@ -264,8 +261,8 @@ public class CastJobActor extends AbstractActor {
     }
     private void _filterUser(PushTarget t, PushEvent event) {
         long start = System.currentTimeMillis();
-        if (userFilter.doFilter(t) && !StringUtils.isEmpty(event.payload)) {
-            _doPush(event,new TargetSucceed(new PushTarget[]{t}));
+        if (!StringUtils.isBlank(event.payload) && userFilter.doFilter(t)) {
+            _doPush(event,new SubmitPushEventSucceed(new PushTarget[]{t}));
         } else { //被过滤不符合发送条件的用户不做总量计数，直接pass并设置job进度
             targetSucceed(t);
             //此处发消息，而非直接调用_pushOne()，是为了防止大量连续的被过滤target引起过深的递归，从而导致栈溢出
@@ -300,18 +297,18 @@ public class CastJobActor extends AbstractActor {
     /**
      * targets列表中的的推送已正确提交的Pusher，可以开始下一轮推送
      */
-    private static class TargetSucceed {
+    private static class SubmitPushEventSucceed {
         final PushTarget[] targets;
         final long startTime;
 
-        private TargetSucceed(PushTarget[] targets) {
+        private SubmitPushEventSucceed(PushTarget[] targets) {
             this.targets = targets;
             this.startTime = System.currentTimeMillis();
         }
     }
 
-    private void handleTargetSucceed(TargetSucceed msg) {
-        logger.trace("handleTargetSucceed");
+    private void handleSubmitPushEventSucceed(SubmitPushEventSucceed msg) {
+        logger.trace("handleSubmitPushEventSucceed");
         submitFailedBeginTime = 0; //提交成功必须重置“提交失败状态起始时间”为0
         state.submitPushEventTime += System.currentTimeMillis() - msg.startTime;
         //提交成功才做总量计数
@@ -536,7 +533,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushSucceed(PushSucceed msg) {
-        logger.trace("call onPushSucceed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushSucceed(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
@@ -563,7 +560,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushFailed(PushFailed msg) {
-        logger.trace("call onPushFailed(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushFailed(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());
@@ -586,7 +583,7 @@ public class CastJobActor extends AbstractActor {
         }
     }
     private void handlePushRateLimit(PushRateLimit msg) {
-        logger.trace("call onPushRateLimit(msg), topic={}, token={}",msg.event.topic, msg.event.tokens[0]);
+        logger.trace("call onPushRateLimit(msg), topic={}",msg.event.topic);
         boolean removed = state.submitedEvents.remove(msg.event);
         if (!removed) {
             logger.warn("assert failed: event not in submited list! (castjob:{})", job.getId());

@@ -1,0 +1,18 @@
+@startuml
+
+interface IPushClient
+IPushClient <|--  ApnsPushClient
+IPushClient <|-- HuaweiPushClient
+interface ITargetSource
+interface IPushClientFactory {
+  IPushClient create()
+}
+IPushClientFactory ..> IPushClient
+CastJobActor --> Pusher
+Pusher -> IPushClientFactory
+Pusher *-> PushActor
+PushActor -> IPushClient
+IPushClient .> IPushStatusListener
+CastJobActor -> ITargetSource
+
+@enduml

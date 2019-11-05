@@ -31,8 +31,11 @@ public class PushTargetService {
     @Autowired
     private PushTargetDao pushTargetDao;
 
-    @Value("${push.pushTarget.queryPageSize}")
+    @Value("${push.pushTarget.queryPageSize:1024}")
     int queryPageSize;
+
+    @Value("${push.pushTarget.deleteRepeatedRecord:true}")
+    boolean deleteRepeatedRecord;
 
     @Autowired
     UserDailyTimerService userDailyTimerService;
@@ -59,56 +62,56 @@ public class PushTargetService {
         }
         List<PushTarget> list = pushTargetDao.findByProductAndUserId(product, userId);
         if (list.isEmpty()) {
-            //两次empty处理：容错措施（pushTarget表可能非常大，为了提高性能，没有建立主键外的唯一性索引，容易因逻辑错误引起数据重复），
-            // 防止特殊情况下UserId变化，引起两个UserId拥有同一个Token造成的重复推送消息问题
-            // （前提是推送平台Token是全局唯一的，当前APNS等主要的推送平台都符合此前提）
-            list = pushTargetDao.findByProductAndToken(product, token);
-            if (list.isEmpty()) {
-                PushTarget pd = new PushTarget();
-                pd.setProduct(product);
-                pd.setUserId(userId);
-                pd.setToken(token);
-                pd.setTokenActived(tokenActived);
-                pd.setPartitions(Partition.makeUserPartition(userId));
-                if (userInfo != null) {
-                    pd.setUserInfo(userInfo);
-                }
-                pd.setLastUpdate(new Timestamp(System.currentTimeMillis()));
-                return savePushTarget(pd);
-            }
-        }
-        if (list.size() > 1) {
-            int n = 0;
-            //容错处理：将多出的记录设置为unactived，防止重复发送消息，防止重复错误日志
-            for (int i=1;i<list.size();++i) {
-                PushTarget p = list.get(i);
-                if (p.isTokenActived()) {
-                    n++;
-                    p.setTokenActived(false);
-                    savePushTarget(p);
+            //容错措施（pushTarget表可能非常大，为了提高性能，没有建立主键外的唯一性索引，容易因逻辑错误引起数据重复），
+            //防止特殊情况下UserId变化，引起两个UserId拥有同一个Token造成的重复推送消息问题
+            //（前提是推送平台Token是全局唯一的，当前APNS等主要的推送平台都符合此前提）
+            if (deleteRepeatedRecord) {
+                list = pushTargetDao.findByProductAndToken(product, token);
+                if (!list.isEmpty()) {
+                    for (int i = 0; i < list.size(); ++i) {
+                        PushTarget p = list.get(i);
+                        pushTargetDao.delete(p);
+                        logger.error("删除重复Token：id={}, product={}, userId={}, token={}, userInfo={}", p.getId(), product, p.getUserId(), token, p.getUserInfo());
+                    }
                 }
             }
-            if (n > 0) {
-                logger.error("断言失败： 按定义最多只应有一条记录，请排查数据或逻辑。product={}, userId={}, token={}", product, userId, token);
-            }
-        }
-        PushTarget pd = list.get(0);
-        if ( needUpdate(pd.getLastUpdate())
-            || changed(userInfo, pd.getUserInfo())
-            || changed(token, pd.getToken())
-            || changed(userId, pd.getUserId())
-            || tokenActived != pd.isTokenActived()
-        ) {
-            pd.setToken(token);
+            PushTarget pd = new PushTarget();
+            pd.setProduct(product);
             pd.setUserId(userId);
+            pd.setToken(token);
             pd.setTokenActived(tokenActived);
+            pd.setPartitions(Partition.makeUserPartition(userId));
             if (userInfo != null) {
                 pd.setUserInfo(userInfo);
             }
             pd.setLastUpdate(new Timestamp(System.currentTimeMillis()));
             return savePushTarget(pd);
         } else {
-            return pd;
+            if (deleteRepeatedRecord && list.size() > 1) {
+                for (int i=1;i<list.size();++i) {
+                    PushTarget p = list.get(i);
+                    pushTargetDao.delete(p);
+                    logger.error("删除重复UserId：id={}, product={}, userId={}", p.getId(), product, p.getUserId());
+                }
+            }
+            PushTarget pd = list.get(0);
+            if ( needUpdate(pd.getLastUpdate())
+                || changed(userInfo, pd.getUserInfo())
+                || changed(token, pd.getToken())
+                || changed(userId, pd.getUserId())
+                || tokenActived != pd.isTokenActived()
+            ) {
+                pd.setToken(token);
+                pd.setUserId(userId);
+                pd.setTokenActived(tokenActived);
+                if (userInfo != null) {
+                    pd.setUserInfo(userInfo);
+                }
+                pd.setLastUpdate(new Timestamp(System.currentTimeMillis()));
+                return savePushTarget(pd);
+            } else {
+                return pd;
+            }
         }
     }
 
@@ -124,8 +127,12 @@ public class PushTargetService {
             pd.setLastUpdate(new Timestamp(System.currentTimeMillis()));
             return savePushTarget(pd);
         } else {
-            if (list.size() > 1) {
-                logger.error("断言失败： 按定义最多只应有一条记录，请排查数据或逻辑。product={}, userId={}", product, userId);
+            if (deleteRepeatedRecord && list.size() > 1) {
+                for (int i=1;i<list.size();++i) {
+                    PushTarget p = list.get(i);
+                    pushTargetDao.delete(p);
+                    logger.error("删除重复UserId：id={}, product={}, userId={}", p.getId(), product, p.getUserId());
+                }
             }
             PushTarget pd = list.get(0);
             if (needUpdate(pd.getLastUpdate()) || changed(userInfo, pd.getUserInfo())) {
@@ -168,8 +175,12 @@ public class PushTargetService {
             pd.setLastUpdate(new Timestamp(System.currentTimeMillis()));
             return savePushTarget(pd);
         } else {
-            if (list.size() > 1) {
-                logger.error("断言失败： 按定义最多只应有一条记录，请排查数据或逻辑。product={}, userId={}", product, userId);
+            if (deleteRepeatedRecord && list.size() > 1) {
+                for (int i=1;i<list.size();++i) {
+                    PushTarget p = list.get(i);
+                    pushTargetDao.delete(p);
+                    logger.error("删除重复UserId：id={}, product={}, userId={}", p.getId(), product, p.getUserId());
+                }
             }
             PushTarget pd = list.get(0);
             if ( needUpdate(pd.getLastUpdate())

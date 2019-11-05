@@ -11,9 +11,10 @@ import net.arksea.pusher.request.*;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import scala.Option;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.util.List;
+import java.util.Optional;
 
 /**
  *
@@ -51,7 +52,7 @@ public class PushServer extends AbstractActor {
     }
 
     @Override
-    public void preRestart(Throwable ex, Option<Object> msg) throws Exception {
+    public void preRestart(Throwable ex, Optional<Object> msg) throws Exception {
         super.preRestart(ex, msg);
         logger.warn("PushServer restarting because exception", ex);
     }
@@ -110,17 +111,21 @@ public class PushServer extends AbstractActor {
         try {
             if (StringUtils.isEmpty(msg.situs) || StringUtils.isEmpty(msg.userId)) {
                 logger.debug("Situs or userId is empty: userId={}", msg.userId);
+                PushResult<Long> result = new PushResult<>(400, "illegal params", null);
+                sender().tell(new ServiceResponse(result, request, true), self());
                 return;
             }
-            logger.debug("updateSitus: product={}, userId={}, userInfo={}, situs={}, situsGroup={}, location={}",
+            logger.debug("updateSitus : product={}, userId={}, userInfo={}, situs={}, situsGroup={}, location={}",
                 msg.product, msg.userId, msg.userInfo, msg.situs, msg.situsGroup, msg.location);
             PushTarget target = stat.pushTargetService.updateSitus(msg.product, msg.userId, msg.userInfo, msg.situs, msg.situsGroup, msg.location);
             PushResult<Long> result = new PushResult<>(0, target.getId());
             sender().tell(new ServiceResponse(result, request, true), self());
         } catch (Exception ex) {
-            logger.warn("Update user situs failed: userId={}", msg.userId, ex);
-            PushResult<Long> result = new PushResult<>(1);
-            sender().tell(new ServiceResponse(result, request, false), self());
+            logger.warn("updateSitus failed: product={}, userId={}, userInfo={}, situs={}, situsGroup={}, location={}",
+                msg.product, msg.userId, msg.userInfo, msg.situs, msg.situsGroup, msg.location, ex);
+            PushResult<Boolean> result = new PushResult<>(1, ex.getClass().getName(),false);
+            boolean succeed = ex instanceof DataIntegrityViolationException;
+            sender().tell(new ServiceResponse(result, request, succeed), self());
         }
     }
 
@@ -128,17 +133,21 @@ public class PushServer extends AbstractActor {
         try {
             if (StringUtils.isEmpty(msg.token) || StringUtils.isEmpty(msg.userId)) {
                 logger.debug("Token or userId is empty: userId={}", msg.userId);
+                PushResult<Long> result = new PushResult<>(400, "illegal params", null);
+                sender().tell(new ServiceResponse(result, request, true), self());
                 return;
             }
-            logger.debug("updateToken: product={}, userId={}, token={}, userInfo={}",
+            logger.debug("Update token: product={}, userId={}, token={}, userInfo={}",
                 msg.product, msg.userId, msg.token, msg.userInfo);
             PushTarget target = stat.pushTargetService.updateToken(msg.product, msg.userId, msg.userInfo, msg.token, true);
             PushResult<Long> result = new PushResult<>(0, target.getId());
             sender().tell(new ServiceResponse(result, request), self());
         } catch (Exception ex) {
-            logger.warn("Update token failed: userId={}", msg.userId, ex);
-            PushResult<Long> result = new PushResult<>(1);
-            sender().tell(new ServiceResponse(result, request, false), self());
+            logger.warn("Update token failed: product={},userId={},token={},userInfo={}",
+                msg.product, msg.userId, msg.token,msg.userInfo, ex);
+            PushResult<Boolean> result = new PushResult<>(1, ex.getClass().getName(),false);
+            boolean succeed = ex instanceof DataIntegrityViolationException;
+            sender().tell(new ServiceResponse(result, request, succeed), self());
         }
     }
 
@@ -149,9 +158,10 @@ public class PushServer extends AbstractActor {
             PushResult<Boolean> result = new PushResult<>(0, n);
             sender().tell(new ServiceResponse(result, request), self());
         } catch (Exception ex) {
-            logger.warn("Update token's status failed: {}", msg.token, ex);
-            PushResult<Boolean> result = new PushResult<>(1, false);
-            sender().tell(new ServiceResponse(result, request, false), self());
+            logger.warn("Update token's status failed: token={}, actived={}", msg.token, msg.actived, ex);
+            PushResult<Boolean> result = new PushResult<>(1, ex.getClass().getName(),false);
+            boolean succeed = ex instanceof DataIntegrityViolationException;
+            sender().tell(new ServiceResponse(result, request, succeed), self());
         }
     }
 

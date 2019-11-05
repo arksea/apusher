@@ -1,0 +1,53 @@
+@startuml
+skinparam ParticipantPadding 20
+skinparam BoxPadding 20
+
+CastJobActor -\\ CastJobActor: CastJobStartDelay
+...延时消息，延时时间在一个小范围内随机，让并发job相对分散...
+CastJobActor -\ CastJobActor: handleCastJobStartDelay()
+activate CastJobActor
+create Pusher
+CastJobActor -> Pusher: new
+
+collections PushActor
+create PushActor
+Pusher -> PushActor: actorOf
+CastJobActor -\\ CastJobActor: PushOne
+deactivate CastJobActor
+...延时消息，给Pusher的初始化工作一些时间...
+group _pushOne()
+    alt has need retry events
+        |||
+        CastJobActor -\ CastJobActor: _pushOneRetryEvent
+        CastJobActor -\ CastJobActor: _doPush()
+        ref over CastJobActor,Pusher: 2_do_push.push()
+        |||
+    else targets is empty
+        |||
+        CastJobActor -\\ CastJobActor: NextPage
+        ...
+        CastJobActor ->> TargetSource: nextPage()
+        return PageTargets
+        activate CastJobActor
+        ref over CastJobActor,Pusher: _pushOne()
+        deactivate CastJobActor
+        |||
+    else targets is not empty
+        |||
+        CastJobActor -\ CastJobActor: _pushOneTarget()
+        CastJobActor -\ CastJobActor: _filterUser()
+        alt be filted
+            CastJobActor -\ CastJobActor: targetSucceed()
+            CastJobActor -\\ CastJobActor: PushOne
+            note right: 此处发PushOne消息而非直接调用_pushOne()\n是为了防止深递归引起的栈溢出
+            |||
+            ref over CastJobActor,Pusher: _pushOne()
+            |||
+        else not be filted
+            CastJobActor -\ CastJobActor: _doPush()
+            ref over CastJobActor,Pusher: 2_do_push.push()
+        end
+        |||
+    end
+end
+@enduml

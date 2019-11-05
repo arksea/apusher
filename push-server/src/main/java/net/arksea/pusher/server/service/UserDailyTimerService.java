@@ -149,8 +149,10 @@ public class UserDailyTimerService {
                     }, pushTargetCacheService.dispatcher);
                 PushTarget t = Await.result(f, timeout);
                 if (t != null) {
-                    payloadService.fillPayload(t, timer.getPayloadUrl(), timer.getPayloadCacheKeys(), payloadCache);
-                    targets.add(t);
+                    boolean b = payloadService.fillPayload(t, timer.getPayloadUrl(), timer.getPayloadCacheKeys(), payloadCache);
+                    if (b) {
+                        targets.add(t);
+                    }
                 }
             }
             return targets;
