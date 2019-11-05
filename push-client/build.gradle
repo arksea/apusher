@@ -32,17 +32,19 @@ uploadArchives {
     }
 }.dependsOn(assemble)
 
-task publishDev <<{
-    //拷贝前先删除部署目录
-    delete('tools/lib')
-    copy{ //拷贝依赖库
-        from configurations.runtime
-        into 'tools/lib'
-    }
-    delete('tools/lib/xml-apis-1.0.b2.jar')
-    copy{ //拷贝类
-        from 'build/libs/'
-        into 'tools/lib'
+task publishDev {
+    dependsOn build
+    doLast {
+        //拷贝前先删除部署目录
+        delete('tools/lib')
+        copy { //拷贝依赖库
+            from configurations.runtime
+            into 'tools/lib'
+        }
+        delete('tools/lib/xml-apis-1.0.b2.jar')
+        copy { //拷贝类
+            from 'build/libs/'
+            into 'tools/lib'
+        }
     }
 }
-publishDev.dependsOn(build)

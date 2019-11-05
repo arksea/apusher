@@ -1,0 +1,56 @@
+@startuml
+skinparam ParticipantPadding 20
+skinparam BoxPadding 20
+
+group push()
+    CastJobActor ->> Pusher: push()
+    activate Pusher
+    collections PushActor
+    Pusher -> Pusher: askAvailablePuseActor()
+    Pusher -\\ PushActor: AvailableAsk
+    PushActor -> PushActor: isAvailable()
+    note right: 发送给一组PushActor(由FirstCompletedGroup管理),\n获取最先返回的结果.\n此设计的目的是为了增加吞吐量，降低阻塞可能
+    deactivate Pusher
+
+    alt is not available
+        PushActor -\ PushActor: delayConnect()
+    else is available
+        PushActor -->> Pusher: AvailableReply
+        activate Pusher
+        Pusher -\\ PushActor: PushEvent
+        deactivate Pusher
+    end
+
+    PushActor -> PushActor: isAvailable()
+
+    alt is available
+        PushActor -->> CastJobActor: true (Submitted)
+        PushActor -\ PushClient: push()
+        note right: 为了提高吞吐量，push()提交PushEvent后\n直接返回true/false提交结果，不等待实际推送结果
+        CastJobActor -\\ CastJobActor: SubmitPushEventSucceed
+    else is not available
+        PushActor -->> CastJobActor: false (not Submitted)
+        CastJobActor -\\ CastJobActor: SubmitPushEventFailed
+    else push() timeout or failed
+        CastJobActor -->> CastJobActor: SubmitPushEventFailed
+    end
+
+    CastJobActor -\ CastJobActor: _pushOne()
+    ref over CastJobActor: 11_job_start: _pushOne()
+    deactivate CastJobActor
+
+    alt push succeed
+        PushClient -\ IPushStatusListener: onPushSucceed()
+        activate IPushStatusListener
+        IPushStatusListener -\\ CastJobActor: PushSucceed
+        note right: PushSucceed与PushFailed消息\n仅用于统计推送结果
+        deactivate IPushStatusListener
+    else push failed
+        PushClient -\ IPushStatusListener: onPushFailed()
+        activate IPushStatusListener
+        IPushStatusListener -\\ CastJobActor: PushFailed
+        deactivate IPushStatusListener
+    end
+
+end
+@enduml

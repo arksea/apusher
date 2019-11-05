@@ -42,23 +42,25 @@ jar {
 }
 
 //拷贝部署文件到指定目录
-task publish <<{
-    //拷贝前先删除部署目录
-    delete('publish/lib')
-    copy{ //拷贝本项目打包的jar文件
-        from 'build/libs/'
-        into 'publish'
-    }
-    copy{ //拷贝依赖库
-        from 'config'
-        into 'publish/config'
-    }
-    copy{ //拷贝依赖库
-        from configurations.runtime
-        into 'publish/lib'
+task publish {
+    dependsOn build
+    doLast {
+        //拷贝前先删除部署目录
+        delete('publish/lib')
+        copy { //拷贝本项目打包的jar文件
+            from 'build/libs/'
+            into 'publish'
+        }
+        copy { //拷贝依赖库
+            from 'config'
+            into 'publish/config'
+        }
+        copy { //拷贝依赖库
+            from configurations.runtime
+            into 'publish/lib'
+        }
     }
 }
-publish.dependsOn(build)
 
 fxlauncher {
     applicationVendor 'Push test tool'

@@ -42,6 +42,9 @@ public class Pusher implements IPusher {
             ActorRef ref = actorRefFactory.actorOf(props);
             pusherList.add(ref);
         }
+        //N个PushActor，每个与另两个随机的PushActor组成一个FirstCompletedGroup
+        //最终形成N个Group，每次请求时，随机向其中一个Group获取处于available状态的PushActor
+        //这种结构的目的是为了控制每个Group中PushActor的数量，避免当N比较大时,每次请求都要群发AvailableAsk引起消息风暴导致效率降低
         for (int i=0;i<clientCount;++i) {
             List<String> paths = new LinkedList<>();
             Set<Integer> indexSet = new LinkedHashSet<>();
