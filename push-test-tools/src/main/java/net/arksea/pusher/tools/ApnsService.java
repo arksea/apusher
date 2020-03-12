@@ -11,6 +11,7 @@ import net.arksea.pusher.apns.PushClient;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.eclipse.jetty.http2.api.Session;
+import org.eclipse.jetty.http2.client.HTTP2Client;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
 
 import java.io.FileInputStream;
@@ -22,6 +23,7 @@ import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 
 /**
  *
@@ -39,6 +41,7 @@ public class ApnsService {
     private Session _session;
     private boolean propsChanged;
     QueuedThreadPool queuedThreadPool;
+    HTTP2Client http2Client;
 
     public ApnsService(TextField textFieldApnsTopic,
             TextField textFieldApnsToken,
@@ -69,9 +72,18 @@ public class ApnsService {
             queuedThreadPool = new QueuedThreadPool(3,1);
             queuedThreadPool.setDaemon(true);
             queuedThreadPool.start();
+            http2Client = createHttp2Client(queuedThreadPool);
         } catch (Exception ex) {
             logger.warn("加载配置失败", ex);
         }
+    }
+
+    public static HTTP2Client createHttp2Client(final Executor executor) throws Exception {
+        HTTP2Client http2Client = new HTTP2Client();
+        //http2Client.addLifeCycleListener(lifeCycleListener);
+        http2Client.setExecutor(executor);
+        http2Client.start();
+        return http2Client;
     }
 
     public void push() throws Exception {
@@ -81,7 +93,7 @@ public class ApnsService {
         String pwd = textFieldApnsCertPassword.getText();
         String apnsTopic = textFieldApnsTopic.getText();
         String file = textFieldApnsCertFile.getText();
-        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, pwd, file, queuedThreadPool);
+        this.pushClient = new PushClient("test", apnsTopic, PushClient.APNS_HOST, pwd, file, http2Client);
         pushClient.connect(new IConnectionStatusListener() {
             @Override
             public void onSucceed() {

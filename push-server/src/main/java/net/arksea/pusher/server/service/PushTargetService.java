@@ -1,5 +1,6 @@
 package net.arksea.pusher.server.service;
 
+import akka.dispatch.Mapper;
 import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.server.repository.PushTargetDao;
@@ -11,10 +12,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
 
 import javax.transaction.Transactional;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -54,6 +59,24 @@ public class PushTargetService {
 
     public long countBySitusAndProduct(String situs, String product) {
         return pushTargetDao.countBySitusAndProduct(situs, product);
+    }
+
+    public Future<PushTarget> getPushTarget(final String product, final String userId) {
+        if (StringUtils.isBlank(userId)) {
+            throw new IllegalArgumentException("UserId is blank: userId=" + userId);
+        }
+        PushTargetCacheFactory.PushTargetKey key = new PushTargetCacheFactory.PushTargetKey(product,userId);
+        return pushTargetCacheService.get(key).map(
+            new Mapper<PushTarget, PushTarget>() {
+                public PushTarget apply(PushTarget it) {
+                    try {
+                        //clone()是必须的操作，否则cache中的pushTarget对象将可能被修改
+                        return  it == null ? null : it.clone();
+                    } catch (CloneNotSupportedException e) {
+                        throw new RuntimeException("clone PushTarget failed", e);
+                    }
+                }
+            }, pushTargetCacheService.dispatcher);
     }
 
     public PushTarget updateToken(final String product, final String userId, final String userInfo, final String token, final boolean tokenActived) {
