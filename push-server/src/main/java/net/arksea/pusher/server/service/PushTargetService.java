@@ -1,5 +1,6 @@
 package net.arksea.pusher.server.service;
 
+import akka.dispatch.Mapper;
 import net.arksea.pusher.server.Partition;
 import net.arksea.pusher.entity.PushTarget;
 import net.arksea.pusher.server.repository.PushTargetDao;
@@ -11,10 +12,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
+import scala.concurrent.Await;
+import scala.concurrent.Future;
+import scala.concurrent.duration.Duration;
 
 import javax.transaction.Transactional;
 import java.sql.Timestamp;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  *
@@ -56,26 +61,50 @@ public class PushTargetService {
         return pushTargetDao.countBySitusAndProduct(situs, product);
     }
 
+    public Future<PushTarget> getPushTarget(final String product, final String userId) {
+        if (StringUtils.isBlank(userId)) {
+            throw new IllegalArgumentException("UserId is blank: userId=" + userId);
+        }
+        PushTargetCacheFactory.PushTargetKey key = new PushTargetCacheFactory.PushTargetKey(product,userId);
+        return pushTargetCacheService.get(key).map(
+            new Mapper<PushTarget, PushTarget>() {
+                public PushTarget apply(PushTarget it) {
+                    try {
+                        //clone()是必须的操作，否则cache中的pushTarget对象将可能被修改
+                        return  it == null ? null : it.clone();
+                    } catch (CloneNotSupportedException e) {
+                        throw new RuntimeException("clone PushTarget failed", e);
+                    }
+                }
+            }, pushTargetCacheService.dispatcher);
+    }
+
+    private PushTarget deleteRepeatedToken(String product, String token, PushTarget def) {
+        //容错措施（pushTarget表可能非常大，为了提高性能，没有建立主键外的唯一性索引，容易因逻辑错误引起数据重复），
+        //防止特殊情况下UserId变化，引起两个UserId拥有同一个Token造成的重复推送消息问题
+        //（前提是推送平台Token是全局唯一的，当前APNS等主要的推送平台都符合此前提）
+        PushTarget pd = def;
+        if (deleteRepeatedRecord) {
+            List<PushTarget> list = pushTargetDao.findByProductAndToken(product, token);
+            if (!list.isEmpty()) {
+                pd = list.get(0);
+                for (int i = 1; i < list.size(); ++i) {
+                    PushTarget p = list.get(i);
+                    pushTargetDao.delete(p);
+                    logger.error("删除重复Token：id={}, product={}, userId={}, token={}, userInfo={}", p.getId(), product, p.getUserId(), token, p.getUserInfo());
+                }
+            }
+        }
+        return pd;
+    }
+
     public PushTarget updateToken(final String product, final String userId, final String userInfo, final String token, final boolean tokenActived) {
         if (StringUtils.isBlank(userId) || StringUtils.isBlank(token)) {
             throw new IllegalArgumentException("UserId or Token is blank: userId=" + userId + ", token=" + token);
         }
         List<PushTarget> list = pushTargetDao.findByProductAndUserId(product, userId);
         if (list.isEmpty()) {
-            //容错措施（pushTarget表可能非常大，为了提高性能，没有建立主键外的唯一性索引，容易因逻辑错误引起数据重复），
-            //防止特殊情况下UserId变化，引起两个UserId拥有同一个Token造成的重复推送消息问题
-            //（前提是推送平台Token是全局唯一的，当前APNS等主要的推送平台都符合此前提）
-            if (deleteRepeatedRecord) {
-                list = pushTargetDao.findByProductAndToken(product, token);
-                if (!list.isEmpty()) {
-                    for (int i = 0; i < list.size(); ++i) {
-                        PushTarget p = list.get(i);
-                        pushTargetDao.delete(p);
-                        logger.error("删除重复Token：id={}, product={}, userId={}, token={}, userInfo={}", p.getId(), product, p.getUserId(), token, p.getUserInfo());
-                    }
-                }
-            }
-            PushTarget pd = new PushTarget();
+            PushTarget pd = deleteRepeatedToken(product, token, new PushTarget());
             pd.setProduct(product);
             pd.setUserId(userId);
             pd.setToken(token);
@@ -94,7 +123,7 @@ public class PushTargetService {
                     logger.error("删除重复UserId：id={}, product={}, userId={}", p.getId(), product, p.getUserId());
                 }
             }
-            PushTarget pd = list.get(0);
+            PushTarget pd = deleteRepeatedToken(product, token, list.get(0));
             if ( needUpdate(pd.getLastUpdate())
                 || changed(userInfo, pd.getUserInfo())
                 || changed(token, pd.getToken())

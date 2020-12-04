@@ -195,6 +195,9 @@ public class PushService {
         throw new UnsupportedOperationException("功能未实现");
     }
 
+    public Future<PushResult<String>> getUserInfo(String product, String userId) {
+        return request(new GetUserInfo(product, userId));
+    }
     /**
      *
      * @param prodcut

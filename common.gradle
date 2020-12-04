@@ -5,7 +5,7 @@ apply plugin: 'java'
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 group = 'net.arksea'
-version = '1.2.2-SNAPSHOT'
+version = '1.2.3-SNAPSHOT'
 
 sourceCompatibility = '1.8'
 targetCompatibility = '1.8'

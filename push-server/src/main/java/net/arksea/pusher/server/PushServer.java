@@ -1,7 +1,9 @@
 package net.arksea.pusher.server;
 
 import akka.actor.AbstractActor;
+import akka.actor.ActorRef;
 import akka.actor.Props;
+import akka.dispatch.OnComplete;
 import akka.japi.Creator;
 import net.arksea.dsf.service.ServiceRequest;
 import net.arksea.dsf.service.ServiceResponse;
@@ -12,6 +14,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.dao.DataIntegrityViolationException;
+import scala.Function1;
+import scala.concurrent.Future;
 
 import java.util.List;
 import java.util.Optional;
@@ -104,6 +108,8 @@ public class PushServer extends AbstractActor {
             updateDailyCast((UpdateDailyCast)request.message, request);
         } else if (request.message instanceof UpdateUserInfo) {
             updateUserInfo((UpdateUserInfo)request.message, request);
+        } else if (request.message instanceof GetUserInfo) {
+            getUserInfo((GetUserInfo)request.message, request);
         }
     }
 
@@ -389,4 +395,23 @@ public class PushServer extends AbstractActor {
         }
     }
 
+    private void getUserInfo(GetUserInfo msg, ServiceRequest request) {
+
+        Future<PushTarget> f = stat.pushTargetService.getPushTarget(msg.product, msg.userId);
+        ActorRef sender = sender();
+        f.onComplete(new OnComplete<PushTarget>() {
+            @Override
+            public void onComplete(Throwable ex, PushTarget target) {
+                if(ex == null && target != null) {
+                    logger.debug("get UserInfo succeed: product={}, userId={}, info={}", msg.product, msg.userId, target.getUserInfo());
+                    PushResult<String> result = new PushResult<>(0, target.getUserInfo());
+                    sender.tell(new ServiceResponse(result, request), self());
+                } else {
+                    logger.warn("get UserInfo failed: product={}, userId={}", msg.product, msg.userId, ex);
+                    PushResult<String> result = new PushResult<>(1);
+                    sender.tell(new ServiceResponse(result, request, false), self());
+                }
+            }
+        },context().dispatcher());
+    }
 }
