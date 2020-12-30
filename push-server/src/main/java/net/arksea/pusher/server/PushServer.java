@@ -74,6 +74,8 @@ public class PushServer extends AbstractActor {
             updateToken((UpdateToken)request.message, request);
         } else if (request.message instanceof UpdateTokenStatus) {
             updateTokenStatus((UpdateTokenStatus)request.message, request);
+        } else if (request.message instanceof UpdateTokenStatusByUID) {
+            updateTokenStatusByUID((UpdateTokenStatusByUID)request.message, request);
         } else if (request.message instanceof GetUserDailyTimers) {
             getUserDailyTimers((GetUserDailyTimers)request.message, request);
         } else if (request.message instanceof UpdateUserDailyTimer) {
@@ -171,6 +173,19 @@ public class PushServer extends AbstractActor {
         }
     }
 
+    private void updateTokenStatusByUID(UpdateTokenStatusByUID msg, ServiceRequest request) {
+        try {
+            logger.debug("updateTokenStatusByUserId: userId={}, actived={}", msg.userId, msg.actived);
+            boolean n = stat.pushTargetService.updateTokenStatusByUserId(msg.userId, msg.actived);
+            PushResult<Boolean> result = new PushResult<>(0, n);
+            sender().tell(new ServiceResponse(result, request), self());
+        } catch (Exception ex) {
+            logger.warn("Update token's status failed: userId={}, actived={}", msg.userId, msg.actived, ex);
+            PushResult<Boolean> result = new PushResult<>(1, ex.getClass().getName(),false);
+            boolean succeed = ex instanceof DataIntegrityViolationException;
+            sender().tell(new ServiceResponse(result, request, succeed), self());
+        }
+    }
     //---------------------------------------------------------------------------------------------------
     //CastJob
     private void addCastJob(AddCastJob msg, ServiceRequest request) {

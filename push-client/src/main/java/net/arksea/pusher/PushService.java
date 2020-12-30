@@ -233,4 +233,13 @@ public class PushService {
     public Future<PushResult<Boolean>> updateTokenStatus(String token, boolean actived) {
         return request(new UpdateTokenStatus(token, actived));
     }
+
+    /**
+     * @param userId
+     * @param actived
+     * @return 返回true表示更新成功，返回false表示没有找到记录
+     */
+    public Future<PushResult<Boolean>> updateTokenStatusByUserId(String userId, boolean actived) {
+        return request(new UpdateTokenStatusByUID(userId, actived));
+    }
 }
