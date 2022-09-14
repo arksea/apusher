@@ -24,6 +24,10 @@ public interface PushTargetDao extends CrudRepository<PushTarget, Long> {
     @Modifying
     int updateTokenStatus(@Param("t") final String token,@Param("a") final Boolean tokenActived);
 
+    @Query("update PushTarget c set c.tokenActived = :a where c.userId = :uid")
+    @Modifying
+    int updateTokenStatusByUserId(@Param("uid") final String userId,@Param("a") final Boolean tokenActived);
+
     @Query("select p from PushTarget p where p.partitions = ?1 and p.token != '' and product = ?2 and tokenActived = true and p.userId > ?3 order by p.userId")
     List<PushTarget> findByPartitionAndProduct(int partition, String product, String fromUserId, Pageable pageable);
 

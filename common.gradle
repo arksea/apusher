@@ -5,7 +5,7 @@ apply plugin: 'java'
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 group = 'net.arksea'
-version = '1.2.3-SNAPSHOT'
+version = '1.2.4-SNAPSHOT'
 
 sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
@@ -13,7 +13,7 @@ targetCompatibility = '1.8'
 repositories {
     mavenLocal()
     maven { url "http://nexus.arksea.net:8081/nexus/content/groups/public/" }
-    maven { url "http://repo.maven.apache.org/maven2" }
+    maven { url "https://repo.maven.apache.org/maven2" }
     mavenCentral()
 }
 

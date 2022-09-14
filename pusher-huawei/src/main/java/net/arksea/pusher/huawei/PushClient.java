@@ -39,7 +39,7 @@ public class PushClient implements IPushClient<String> {
     private long accessTokenExpiresTime;
     private final String appId;
     private final String appKey;
-    private final static String TOKEN_URL = "https://login.cloud.huawei.com/oauth2/v2/token";
+    private final static String TOKEN_URL = "https://oauth-login.cloud.huawei.com/oauth2/v3/token";
     private final String PUSH_URL;
     private final ZoneOffset localZone = ZoneOffset.of("+8");
     private final RequestConfig requestConfig;
@@ -112,7 +112,9 @@ public class PushClient implements IPushClient<String> {
 
     private boolean validToken(String token) {
         int len = token.length();
-        return len==32 || len==130;
+        return len==32      //华为标准1.0
+                //|| len==130 //华为标准2.0
+                || len>64;  //华为标准3.0 -_-!
     }
 
     @Override

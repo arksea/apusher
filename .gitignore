@@ -28,3 +28,6 @@
 /push-test-tools/publish/config
 /push-test-tools/publish/logs
 pusher-xinge/build
+/pusher-aliyun/out
+/pusher-aliyun/build
+/pusher-common/out

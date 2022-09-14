@@ -188,6 +188,21 @@ public class PushTargetService {
         return n >= 1;
     }
 
+    /**
+     *
+     * @param userId
+     * @param tokenActived
+     * @return 返回1表示更新成功，返回0表示没有查询到指定的token
+     */
+    public boolean updateTokenStatusByUserId(final String userId,final Boolean tokenActived) {
+        int n = pushTargetDao.updateTokenStatusByUserId(userId, tokenActived);
+        //取消此处的断言检查：与IOS的token不同，百度的token（ChannelID）是设备唯一，所以有可能出现一台设备装了两个不同ProductId的App后它们上报的token是相同的
+        //if (n > 1) {
+        //    logger.fatal("断言失败： 按定义最多只应更新一条记录，请排查数据或逻辑。token={}, actived={}", token, tokenActived);
+        //}
+        return n >= 1;
+    }
+
     public PushTarget updateSitus(final String product, final String userId, final String userInfo, final String situs, final String situsGroup, final String location) {
         List<PushTarget> list = pushTargetDao.findByProductAndUserId(product, userId);
         if (list.isEmpty()) {
